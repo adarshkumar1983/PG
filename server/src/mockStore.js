@@ -181,3 +181,15 @@ export const acceptMockInvite = (membershipId) => {
   }
   return null;
 };
+
+export const updateMockMemberRole = (id, role, propertyId, roomId, bedId) => {
+  const member = mockMembers.find(m => m.id === id);
+  if (member) {
+    member.role = role;
+    member.propertyId = propertyId;
+    member.roomId = roomId;
+    member.bedId = bedId;
+    return member;
+  }
+  return null;
+};

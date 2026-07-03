@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
   IndianRupee, FileText, HelpCircle, LayoutDashboard, LogIn, Mail, Menu,
@@ -235,23 +235,33 @@ function AcceptInvite({onSwitchView}) {
 }
 
 function Dashboard({session, onLogout}) {
+  console.log('CURRENT SESSION:', session);
   const [data, setData] = useState(fallback);
   const [properties, setProperties] = useState([]);
+  const [members, setMembers] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [active, setActive] = useState('Overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState(false);
   const [toast, setToast] = useState('');
 
-  useEffect(() => {
+  const refreshDashboardData = useCallback(() => {
     fetch('/api/tenant/dashboard', {headers:{Authorization:`Bearer ${session.accessToken}`,'x-organization-id':session.organizationId}}).then(r => r.ok ? r.json() : Promise.reject()).then(result => result.stats ? setData(result) : null).catch(() => {});
     
     fetch('/api/tenant/properties', {headers:{Authorization:`Bearer ${session.accessToken}`,'x-organization-id':session.organizationId}}).then(r => r.ok ? r.json() : Promise.reject()).then(result => {
       setProperties(result);
-      if (result.length > 0) {
+      if (result.length > 0 && !selectedPropertyId) {
         setSelectedPropertyId(result[0]._id);
       }
     }).catch(() => {});
+
+    fetch('/api/tenant/members', {headers:{Authorization:`Bearer ${session.accessToken}`,'x-organization-id':session.organizationId}}).then(r => r.ok ? r.json() : Promise.reject()).then(result => {
+      setMembers(result);
+    }).catch(() => {});
+  }, [session, selectedPropertyId]);
+
+  useEffect(() => {
+    refreshDashboardData();
   }, [session]);
 
   const activeProperty = useMemo(() => properties.find(p => p._id === selectedPropertyId), [properties, selectedPropertyId]);
@@ -268,7 +278,18 @@ function Dashboard({session, onLogout}) {
 
   const vacantBeds = useMemo(() => totalBeds - occupiedBeds, [totalBeds, occupiedBeds]);
   const occupancy = useMemo(() => totalBeds > 0 ? Math.round(occupiedBeds / totalBeds * 100) : 0, [totalBeds, occupiedBeds]);
+  const collectionPercent = useMemo(() => {
+    const totalExpected = data.stats.collected + data.stats.pending;
+    if (totalExpected === 0) return 0;
+    return Math.round((data.stats.collected / totalExpected) * 100);
+  }, [data.stats.collected, data.stats.pending]);
   const notify = message => { setToast(message); setTimeout(() => setToast(''), 2600); };
+  const visibleNav = useMemo(() => {
+    if (data.role === 'resident') {
+      return nav.filter(([label]) => ['Overview', 'Payments'].includes(label));
+    }
+    return nav;
+  }, [data.role]);
 
   return <div className="app-shell">
     <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
@@ -277,57 +298,94 @@ function Dashboard({session, onLogout}) {
         <span className="property-icon"><Building2 size={18}/></span>
         <span style={{flex:1, display:'flex', flexDirection:'column'}}>
           <b>{activeProperty ? activeProperty.name : data.property}</b>
-          <small>Switch property</small>
+          {data.role !== 'resident' && <small>Switch property</small>}
         </span>
-        <ChevronDown size={16} style={{position:'absolute', right:12, pointerEvents:'none'}}/>
-        <select 
-          value={selectedPropertyId} 
-          onChange={e => setSelectedPropertyId(e.target.value)}
-          style={{position:'absolute', inset:0, opacity:0, cursor:'pointer', width:'100%'}}
-        >
-          {properties.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-          {properties.length === 0 && <option value="">No properties</option>}
-        </select>
+        {data.role !== 'resident' && (
+          <>
+            <ChevronDown size={16} style={{position:'absolute', right:12, pointerEvents:'none'}}/>
+            <select 
+              value={selectedPropertyId} 
+              onChange={e => setSelectedPropertyId(e.target.value)}
+              style={{position:'absolute', inset:0, opacity:0, cursor:'pointer', width:'100%'}}
+            >
+              {properties.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {properties.length === 0 && <option value="">No properties</option>}
+            </select>
+          </>
+        )}
       </div>
-      <nav>{nav.map(([label, Icon]) => <button key={label} className={active === label ? 'active' : ''} onClick={() => {setActive(label); setMenuOpen(false); !['Overview','My PG','Members','Rooms & beds'].includes(label) && notify(`${label} module is next in the MVP`);}}><Icon size={19}/>{label}{label === 'Payments' && <i>11</i>}</button>)}</nav>
+      <nav>{visibleNav.map(([label, Icon]) => <button key={label} className={active === label ? 'active' : ''} onClick={() => {setActive(label); setMenuOpen(false); !['Overview','My PG','Members','Rooms & beds'].includes(label) && notify(`${label} module is next in the MVP`);}}><Icon size={19}/>{label}{label === 'Payments' && (data.role === 'resident' ? (data.stats.pending > 0 ? <i>1</i> : null) : <i>11</i>)}</button>)}</nav>
       <div className="sidebar-bottom">
         <button><Settings size={19}/>Settings</button><button><HelpCircle size={19}/>Help & support</button>
-        <button className="account" onClick={onLogout}><span className="avatar small">AK</span><span><b>{session.user?.name || 'Adarsh Kumar'}</b><small>{session.user?.role || 'Owner'} · Sign out</small></span><MoreHorizontal size={18}/></button>
+        <button className="account" onClick={onLogout} title={session.user?.email || 'No email set'}><span className="avatar small">{session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}</span><span><b>{session.user?.name || 'Adarsh Kumar'}</b><small>{data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : (session.user?.role || 'Owner')} · Sign out</small></span><MoreHorizontal size={18}/></button>
       </div>
     </aside>
 
     <main>
-      <header><button className="menu-button" onClick={() => setMenuOpen(true)}><Menu/></button><div className="search"><Search size={18}/><input placeholder="Search residents, rooms, payments..."/><kbd>⌘ K</kbd></div><button className="icon-button"><Bell size={20}/><em/></button><div className="header-avatar">AK</div></header>
+      <header><button className="menu-button" onClick={() => setMenuOpen(true)}><Menu/></button><div className="search"><Search size={18}/><input placeholder="Search residents, rooms, payments..."/><kbd>⌘ K</kbd></div><button className="icon-button"><Bell size={20}/><em/></button><div className="header-avatar" title={session.user?.email || 'No email set'}>{session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}</div></header>
       <section className="content">
         {active === 'My PG' ? <PropertySetup session={session} onDone={(newProp) => {
           setProperties(prev => [...prev, newProp]);
           setSelectedPropertyId(newProp._id);
           setActive('Rooms & beds');
           notify('PG details saved—now manage your rooms');
-        }}/> : active === 'Members' ? <MembersPage session={session}/> : active === 'Rooms & beds' ? <RoomsPage session={session} property={activeProperty} onUpdate={(updated) => {
+        }}/> : active === 'Members' ? <MembersPage session={session} properties={properties} onRefresh={refreshDashboardData}/> : active === 'Rooms & beds' ? <RoomsPage session={session} property={activeProperty} members={members} onUpdate={(updated) => {
           setProperties(prev => prev.map(p => p._id === updated._id ? updated : p));
         }}/> : <>
-        <div className="welcome"><div><p className="eyebrow">{data.month}</p><h1>Good morning, {data.owner} <span>👋</span></h1><p>Here’s what’s happening across your property today.</p></div><button className="primary" onClick={() => setModal(true)}><Plus size={18}/> Add resident</button></div>
+        <div className="welcome"><div><p className="eyebrow">{data.month}</p><h1>Good morning, {data.owner} <span>👋</span></h1><p>{data.role === 'resident' ? 'Here is your PG and payment overview today.' : 'Here’s what’s happening across your property today.'}</p></div>{data.role !== 'resident' && <button className="primary" onClick={() => setModal(true)}><Plus size={18}/> Add resident</button>}</div>
 
-        <div className="metrics">
-          <Metric icon={<Users/>} label="Total residents" value={activeProperty ? activeProperty.rooms.reduce((acc, r) => acc + r.beds.filter(b => b.status === 'occupied').length, 0) : data.stats.residents} note="Dynamic live count" positive />
-          <Metric icon={<BedDouble/>} label="Occupancy" value={`${occupancy}%`} note={`${vacantBeds} beds available`} />
-          <Metric icon={<IndianRupee/>} label="Rent collected" value={money(data.stats.collected)} note="84% of this month" positive />
-          <Metric icon={<CalendarDays/>} label="Pending dues" value={money(data.stats.pending)} note="11 residents overdue" danger />
-        </div>
+        {data.role === 'resident' ? (
+          <div className="metrics">
+            <Metric icon={<Building2/>} label="My PG Property" value={data.residentDetails?.propertyName || 'Assigned PG'} note={data.residentDetails?.address || 'Property Address'} />
+            <Metric icon={<BedDouble/>} label="Room & Bed" value={data.residentDetails?.roomNumber ? `Room ${data.residentDetails.roomNumber} · ${data.residentDetails.bedLabel}` : 'Not Assigned'} note={data.residentDetails?.checkInDate ? `Check-in: ${new Date(data.residentDetails.checkInDate).toLocaleDateString('en-IN')}` : 'N/A'} />
+            <Metric icon={<IndianRupee/>} label="Monthly Rent" value={money(data.residentDetails?.rentAmount || 0)} note="Base rent" positive />
+            <Metric icon={<CalendarDays/>} label="Pending Dues" value={money(data.stats.pending)} note={data.stats.pending > 0 ? "Please pay soon" : "All dues cleared"} danger={data.stats.pending > 0} positive={data.stats.pending === 0} />
+          </div>
+        ) : (
+          <div className="metrics">
+            <Metric icon={<Users/>} label="Total residents" value={activeProperty ? activeProperty.rooms.reduce((acc, r) => acc + r.beds.filter(b => b.status === 'occupied').length, 0) : data.stats.residents} note="Dynamic live count" positive />
+            <Metric icon={<BedDouble/>} label="Occupancy" value={`${occupancy}%`} note={`${vacantBeds} beds available`} />
+            <Metric icon={<IndianRupee/>} label="Rent collected" value={money(data.stats.collected)} note={`${collectionPercent}% of this month`} positive />
+            <Metric icon={<CalendarDays/>} label="Pending dues" value={money(data.stats.pending)} note="11 residents overdue" danger />
+          </div>
+        )}
 
-        <div className="dashboard-grid">
-          <section className="card rent-card"><div className="card-head"><div><h2>Rent collection</h2><p>{data.month} performance</p></div><button className="ghost">This month <ChevronDown size={15}/></button></div>
-            <div className="rent-body"><div className="ring" style={{'--percent': '84%'}}><div><strong>84%</strong><small>collected</small></div></div><div className="rent-numbers"><span><i className="green-dot"/><small>Collected</small><b>{money(data.stats.collected)}</b></span><span><i className="orange-dot"/><small>Pending</small><b>{money(data.stats.pending)}</b></span><hr/><span className="total"><small>Expected this month</small><b>{money(data.stats.collected + data.stats.pending)}</b></span></div></div>
-          </section>
+        {data.role === 'resident' ? (
+          <div className="dashboard-grid">
+            <section className="card rent-card"><div className="card-head"><div><h2>My Rent Status</h2><p>Payment summary for this month</p></div></div>
+              <div className="rent-body">
+                <div className="ring" style={{'--percent': data.stats.pending > 0 ? '0%' : '100%'}}>
+                  <div><strong>{data.stats.pending > 0 ? '0%' : '100%'}</strong><small>paid</small></div>
+                </div>
+                <div className="rent-numbers">
+                  <span><i className="green-dot"/><small>Paid</small><b>{money(data.stats.collected)}</b></span>
+                  <span><i className="orange-dot"/><small>Pending</small><b>{money(data.stats.pending)}</b></span>
+                  <hr/>
+                  <span className="total"><small>Total Rent Due</small><b>{money(data.stats.collected + data.stats.pending)}</b></span>
+                </div>
+              </div>
+            </section>
+            <section className="card attention"><div className="card-head"><div><h2>PG Guidelines</h2><p>General rules & support</p></div></div>
+              <div style={{ padding: '20px', fontSize: '13px', lineHeight: '1.6', color: '#53605c' }}>
+                <p style={{ margin: '0 0 10px' }}>🏡 <b>Support & Assistance:</b> If you face any issues or want to raise a maintenance query, please contact the manager.</p>
+                <p style={{ margin: '0 0 10px' }}>⚡ <b>Electricity Bills:</b> Meter reading is taken on the 1st of every month and bills are updated by the 5th.</p>
+                <p style={{ margin: '0' }}>⏰ <b>Gate Timings:</b> Main gate is closed from 11:00 PM to 6:00 AM daily.</p>
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="dashboard-grid">
+            <section className="card rent-card"><div className="card-head"><div><h2>Rent collection</h2><p>{data.month} performance</p></div><button className="ghost">This month <ChevronDown size={15}/></button></div>
+              <div className="rent-body"><div className="ring" style={{'--percent': `${collectionPercent}%`}}><div><strong>{collectionPercent}%</strong><small>collected</small></div></div><div className="rent-numbers"><span><i className="green-dot"/><small>Collected</small><b>{money(data.stats.collected)}</b></span><span><i className="orange-dot"/><small>Pending</small><b>{money(data.stats.pending)}</b></span><hr/><span className="total"><small>Expected this month</small><b>{money(data.stats.collected + data.stats.pending)}</b></span></div></div>
+            </section>
+            <section className="card attention"><div className="card-head"><div><h2>Needs attention</h2><p>Items that require your action</p></div><button className="text-button">View all <ChevronRight size={16}/></button></div>
+              <div>{data.attention.map(item => <button className="attention-row" key={item.id} onClick={() => notify(item.action)}><span className={`alert-icon ${item.type}`}>{item.icon}</span><span><b>{item.title}</b><small>{item.meta}</small></span><ChevronRight size={18}/></button>)}</div>
+            </section>
+          </div>
+        )}
 
-          <section className="card attention"><div className="card-head"><div><h2>Needs attention</h2><p>Items that require your action</p></div><button className="text-button">View all <ChevronRight size={16}/></button></div>
-            <div>{data.attention.map(item => <button className="attention-row" key={item.id} onClick={() => notify(item.action)}><span className={`alert-icon ${item.type}`}>{item.icon}</span><span><b>{item.title}</b><small>{item.meta}</small></span><ChevronRight size={18}/></button>)}</div>
-          </section>
-        </div>
-
-        <section className="card recent"><div className="card-head"><div><h2>Recent payments</h2><p>Latest rent activity from residents</p></div><button className="text-button">View all payments <ChevronRight size={16}/></button></div>
-          <div className="table"><div className="tr table-head"><span>Resident</span><span>Amount</span><span>Status</span><span>Date</span><span/></div>{data.payments.map(p => <div className="tr" key={p.name}><span className="resident"><i style={{background:p.color}}>{p.initials}</i><span><b>{p.name}</b><small>{p.room}</small></span></span><strong>{money(p.amount)}</strong><span><i className={`pill ${p.status.toLowerCase().replace(' ','-')}`}>{p.status}</i></span><span className="date">{p.date}</span><button className="more"><MoreHorizontal size={18}/></button></div>)}</div>
+        <section className="card recent"><div className="card-head"><div><h2>{data.role === 'resident' ? 'My Recent Payments' : 'Recent payments'}</h2><p>{data.role === 'resident' ? 'Your rent transaction history' : 'Latest rent activity from residents'}</p></div>{data.role !== 'resident' && <button className="text-button">View all payments <ChevronRight size={16}/></button>}</div>
+          <div className="table"><div className="tr table-head"><span>{data.role === 'resident' ? 'Recipient' : 'Resident'}</span><span>Amount</span><span>Status</span><span>Date</span><span/></div>{data.payments.map(p => <div className="tr" key={p.name}><span className="resident"><i style={{background:p.color}}>{p.initials}</i><span><b>{data.role === 'resident' ? data.property : p.name}</b><small>{p.room}</small></span></span><strong>{money(p.amount)}</strong><span><i className={`pill ${p.status.toLowerCase().replace(' ','-')}`}>{p.status}</i></span><span className="date">{p.date}</span><button className="more"><MoreHorizontal size={18}/></button></div>)}</div>
         </section>
         </>}
       </section>
@@ -338,7 +396,7 @@ function Dashboard({session, onLogout}) {
   </div>;
 }
 
-function MembersPage({session}) {
+function MembersPage({session, properties = [], onRefresh}) {
   const seed = [
     {id:'1',name:'Adarsh Kumar',email:'owner@stayzen.demo',mobile:'+91 98765 43210',role:'owner',status:'active'},
     {id:'2',name:'Rohan Singh',email:'manager@greenview.demo',mobile:'+91 99887 76655',role:'staff',status:'active'},
@@ -348,10 +406,106 @@ function MembersPage({session}) {
   const [open,setOpen]=useState(false); 
   const [error,setError]=useState(''); 
   const [saving,setSaving]=useState(false);
-  const [form,setForm]=useState({name:'',email:'',mobile:'',role:'staff'});
+  const [form,setForm]=useState({name:'',email:'',mobile:'',role:'staff',propertyId:'',roomId:'',bedId:''});
   const [inviteLink, setInviteLink] = useState('');
 
+  const [editingMember, setEditingMember] = useState(null);
+  const [editRole, setEditRole] = useState('staff');
+  const [editPropertyId, setEditPropertyId] = useState('');
+  const [editRoomId, setEditRoomId] = useState('');
+  const [editBedId, setEditBedId] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [editError, setEditError] = useState('');
+ 
   useEffect(()=>{fetch('/api/tenant/members',{headers:{Authorization:`Bearer ${session.accessToken}`,'x-organization-id':session.organizationId}}).then(r=>r.ok?r.json():Promise.reject()).then(setMembers).catch(()=>{});},[session]);
+
+  const handlePropertyChange = (propId) => {
+    const prop = properties.find(p => p._id === propId);
+    const firstRoomId = prop?.rooms?.[0]?._id || '';
+    const firstRoom = prop?.rooms?.[0];
+    const firstBedId = firstRoom?.beds?.find(b => b.status === 'vacant')?._id || '';
+    setForm(prev => ({ ...prev, propertyId: propId, roomId: firstRoomId, bedId: firstBedId }));
+  };
+
+  const handleRoomChange = (rId) => {
+    const prop = properties.find(p => p._id === form.propertyId);
+    const room = prop?.rooms?.find(r => r._id === rId);
+    const firstBedId = room?.beds?.find(b => b.status === 'vacant')?._id || '';
+    setForm(prev => ({ ...prev, roomId: rId, bedId: firstBedId }));
+  };
+
+  const handleRoleChange = (newRole) => {
+    setForm(prev => {
+      const update = { ...prev, role: newRole };
+      if (newRole === 'resident' && properties.length > 0 && !prev.propertyId) {
+        update.propertyId = properties[0]._id;
+        update.roomId = properties[0].rooms?.[0]?._id || '';
+        update.bedId = properties[0].rooms?.[0]?.beds?.find(b => b.status === 'vacant')?._id || '';
+      }
+      return update;
+    });
+  };
+
+  const openAddModal = () => {
+    setOpen(true);
+    const propId = properties[0]?._id || '';
+    const prop = properties.find(p => p._id === propId);
+    const roomId = prop?.rooms?.[0]?._id || '';
+    const room = prop?.rooms?.find(r => r._id === roomId);
+    const bedId = room?.beds?.find(b => b.status === 'vacant')?._id || '';
+
+    setForm({
+      name: '',
+      email: '',
+      mobile: '',
+      role: 'staff',
+      propertyId: propId,
+      roomId: roomId,
+      bedId: bedId
+    });
+  };
+
+  const startEditing = (m) => {
+    setEditingMember(m);
+    setEditRole(m.role);
+    
+    const propId = m.propertyId || properties[0]?._id || '';
+    const prop = properties.find(p => p._id === propId);
+    const roomId = m.roomId || prop?.rooms?.[0]?._id || '';
+    const room = prop?.rooms?.find(r => r._id === roomId);
+    const bedId = m.bedId || room?.beds?.find(b => b.status === 'vacant')?._id || '';
+
+    setEditPropertyId(propId);
+    setEditRoomId(roomId);
+    setEditBedId(bedId);
+  };
+
+  const handleEditPropertyChange = (propId) => {
+    const prop = properties.find(p => p._id === propId);
+    const firstRoomId = prop?.rooms?.[0]?._id || '';
+    const firstRoom = prop?.rooms?.[0];
+    const firstBedId = firstRoom?.beds?.find(b => b.status === 'vacant')?._id || '';
+    setEditPropertyId(propId);
+    setEditRoomId(firstRoomId);
+    setEditBedId(firstBedId);
+  };
+
+  const handleEditRoomChange = (rId) => {
+    const prop = properties.find(p => p._id === editPropertyId);
+    const room = prop?.rooms?.find(r => r._id === rId);
+    const firstBedId = room?.beds?.find(b => b.status === 'vacant')?._id || '';
+    setEditRoomId(rId);
+    setEditBedId(firstBedId);
+  };
+
+  const handleEditRoleChange = (newRole) => {
+    setEditRole(newRole);
+    if (newRole === 'resident' && !editPropertyId && properties.length > 0) {
+      setEditPropertyId(properties[0]._id);
+      setEditRoomId(properties[0].rooms?.[0]?._id || '');
+      setEditBedId(properties[0].rooms?.[0]?.beds?.find(b => b.status === 'vacant')?._id || '');
+    }
+  };
   
   const submit=async e=>{
     e.preventDefault();setError('');setSaving(true);
@@ -360,11 +514,12 @@ function MembersPage({session}) {
       const result=await response.json();
       if(!response.ok)throw new Error(result.message);
       setMembers(v=>[result,...v]);
+      if (onRefresh) onRefresh();
       if (result.inviteLink) {
         setInviteLink(result.inviteLink);
       } else {
         setOpen(false);
-        setForm({name:'',email:'',mobile:'',role:'staff'});
+        setForm({name:'',email:'',mobile:'',role:'staff',propertyId:'',roomId:'',bedId:''});
       }
     }catch(err){
       setError(err.message||'Could not add member.');
@@ -373,17 +528,54 @@ function MembersPage({session}) {
     }
   };
 
+  const handleEditSubmit = async e => {
+    e.preventDefault();
+    setEditError('');
+    setUpdating(true);
+    try {
+      const response = await fetch(`/api/tenant/members/${editingMember.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'x-organization-id': session.organizationId
+        },
+        body: JSON.stringify({ role: editRole, propertyId: editPropertyId, roomId: editRoomId, bedId: editBedId })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to update member role.');
+      setMembers(prev => prev.map(m => m.id === result.id ? result : m));
+      if (onRefresh) onRefresh();
+      setEditingMember(null);
+    } catch (err) {
+      setEditError(err.message || 'Could not update member role.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleClose = () => {
     setOpen(false);
     setInviteLink('');
-    setForm({name:'',email:'',mobile:'',role:'staff'});
+    setForm({name:'',email:'',mobile:'',role:'staff',propertyId:'',roomId:'',bedId:''});
     setError('');
   };
 
   const roleCopy={owner:'Full access to PG settings, billing and members',staff:'Manage residents, payments, occupancy and expenses',resident:'View own rent, receipts and raise complaints'};
-  return <div className="members-page"><div className="setup-heading"><div><p className="eyebrow">Access management</p><h1>PG members</h1><p>Add your staff and residents, then decide what each person can access.</p></div><button className="primary" onClick={()=>setOpen(true)}><Plus size={17}/> Add member</button></div>
+  
+  const getAllocationText = (m) => {
+    if (m.role !== 'resident') return roleCopy[m.role];
+    if (!m.propertyId) return 'Resident (Not allocated)';
+    const prop = properties.find(p => p._id === m.propertyId);
+    if (!prop) return 'Resident (Allocated)';
+    const room = prop.rooms?.find(r => r._id === m.roomId);
+    const bed = room?.beds?.find(b => b._id === m.bedId);
+    return `Allocated: ${prop.name} · Room ${room?.number || '—'} · ${bed?.label || '—'}`;
+  };
+
+  return <div className="members-page"><div className="setup-heading"><div><p className="eyebrow">Access management</p><h1>PG members</h1><p>Add your staff and residents, then decide what each person can access.</p></div><button className="primary" onClick={openAddModal}><Plus size={17}/> Add member</button></div>
     <div className="member-stats"><article className="card"><span><Users/></span><div><b>{members.length}</b><small>Total members</small></div></article><article className="card"><span><ShieldCheck/></span><div><b>{members.filter(m=>m.role==='owner').length}</b><small>Owners and admins</small></div></article><article className="card"><span><Building2/></span><div><b>{members.filter(m=>m.role==='staff').length}</b><small>Staff members</small></div></article><article className="card"><span><Mail/></span><div><b>{members.filter(m=>m.status==='invited').length}</b><small>Pending invitations</small></div></article></div>
-    <section className="card member-table-card"><div className="member-toolbar"><div className="search"><Search size={17}/><input placeholder="Search by name, email or phone"/></div><button className="ghost">All roles <ChevronDown size={15}/></button></div><div className="member-table"><div className="member-row member-head"><span>Member</span><span>Role and access</span><span>Status</span><span>Contact</span><span/></div>{members.map(m=><div className="member-row" key={m.id}><span className="member-person"><i>{m.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</i><span><b>{m.name}</b><small>{m.email}</small></span></span><span className="role-cell"><b className={`role-badge ${m.role}`}>{m.role==='owner'?'Owner / Admin':m.role==='staff'?'Staff / Manager':'Resident'}</b><small>{roleCopy[m.role]}</small></span><span><i className={`member-status ${m.status}`}>{m.status}</i></span><span className="contact-cell">{m.mobile||'—'}</span><button className="more"><MoreHorizontal size={18}/></button></div>)}</div></section>
+    <section className="card member-table-card"><div className="member-toolbar"><div className="search"><Search size={17}/><input placeholder="Search by name, email or phone"/></div><button className="ghost">All roles <ChevronDown size={15}/></button></div><div className="member-table"><div className="member-row member-head"><span>Member</span><span>Role and access</span><span>Status</span><span>Contact</span><span/></div>{members.map(m=><div className="member-row" key={m.id}><span className="member-person"><i>{m.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</i><span><b>{m.name}</b><small>{m.email}</small></span></span><span className="role-cell"><b className={`role-badge ${m.role}`}>{m.role==='owner'?'Owner / Admin':m.role==='staff'?'Staff / Manager':'Resident'}</b><small>{getAllocationText(m)}</small></span><span><i className={`member-status ${m.status}`}>{m.status}</i></span><span className="contact-cell">{m.mobile||'—'}</span><button className="more" onClick={() => startEditing(m)} title="Change member role / allocation"><MoreHorizontal size={18}/></button></div>)}</div></section>
     {open&&<div className="modal-backdrop" onMouseDown={handleClose}><form className="modal member-modal" onMouseDown={e=>e.stopPropagation()} onSubmit={submit}><button type="button" className="modal-x" onClick={handleClose}><X/></button>
       {inviteLink ? (
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
@@ -425,11 +617,46 @@ function MembersPage({session}) {
             <label>Email address<input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="name@example.com"/></label>
             <label>Mobile number *<input value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} required placeholder="+91 98765 43210"/></label>
           </div>
-          <label>Member role<select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
+          <label>Member role<select value={form.role} onChange={e=>handleRoleChange(e.target.value)}>
             <option value="owner">Owner / Admin</option>
             <option value="staff">Staff / Manager</option>
             <option value="resident">Resident / Tenant</option>
           </select></label>
+          
+          {form.role === 'resident' && properties.length > 0 && (
+            <div style={{ marginTop: '14px', borderTop: '1px dashed #dce3de', paddingTop: '14px' }}>
+              <p className="eyebrow" style={{ marginBottom: '8px' }}>Room Allocation</p>
+              <div className="form-row">
+                <label>Property *
+                  <select value={form.propertyId} onChange={e => handlePropertyChange(e.target.value)}>
+                    {properties.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label>Room *
+                  <select value={form.roomId} onChange={e => handleRoomChange(e.target.value)}>
+                    {(properties.find(p => p._id === form.propertyId)?.rooms || []).map(r => (
+                      <option key={r._id} value={r._id}>Room {r.number} ({r.sharingType})</option>
+                    ))}
+                    {(properties.find(p => p._id === form.propertyId)?.rooms || []).length === 0 && (
+                      <option value="">No rooms</option>
+                    )}
+                  </select>
+                </label>
+              </div>
+              <label>Bed *
+                <select value={form.bedId} onChange={e => setForm({ ...form, bedId: e.target.value })}>
+                  {(properties.find(p => p._id === form.propertyId)?.rooms?.find(r => r._id === form.roomId)?.beds || [])
+                    .filter(b => b.status === 'vacant')
+                    .map(b => <option key={b._id} value={b._id}>{b.label} (₹{b.monthlyRent}/mo)</option>)
+                  }
+                  {(properties.find(p => p._id === form.propertyId)?.rooms?.find(r => r._id === form.roomId)?.beds || [])
+                    .filter(b => b.status === 'vacant').length === 0 && <option value="">No vacant beds available</option>
+                  }
+                </select>
+              </label>
+            </div>
+          )}
+
           <div className="role-explainer">
             <ShieldCheck/>
             <span>
@@ -443,6 +670,64 @@ function MembersPage({session}) {
           </div>
         </>
       )}
+    </form></div>}
+
+    {editingMember && <div className="modal-backdrop" onMouseDown={() => setEditingMember(null)}><form className="modal member-modal" onMouseDown={e=>e.stopPropagation()} onSubmit={handleEditSubmit}><button type="button" className="modal-x" onClick={() => setEditingMember(null)}><X/></button>
+      <span className="modal-icon"><Users/></span>
+      <h2>Change member role / allocation</h2>
+      <p>Update the access level and room allocation for <b>{editingMember.name}</b>.</p>
+      {editError && <div className="form-error">{editError}</div>}
+      <label>Member role<select value={editRole} onChange={e=>handleEditRoleChange(e.target.value)}>
+        <option value="owner">Owner / Admin</option>
+        <option value="staff">Staff / Manager</option>
+        <option value="resident">Resident / Tenant</option>
+      </select></label>
+
+      {editRole === 'resident' && properties.length > 0 && (
+        <div style={{ marginTop: '14px', borderTop: '1px dashed #dce3de', paddingTop: '14px' }}>
+          <p className="eyebrow" style={{ marginBottom: '8px' }}>Room Allocation</p>
+          <div className="form-row">
+            <label>Property *
+              <select value={editPropertyId} onChange={e => handleEditPropertyChange(e.target.value)}>
+                {properties.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+              </select>
+            </label>
+            <label>Room *
+              <select value={editRoomId} onChange={e => handleEditRoomChange(e.target.value)}>
+                {(properties.find(p => p._id === editPropertyId)?.rooms || []).map(r => (
+                  <option key={r._id} value={r._id}>Room {r.number} ({r.sharingType})</option>
+                ))}
+                {(properties.find(p => p._id === editPropertyId)?.rooms || []).length === 0 && (
+                  <option value="">No rooms</option>
+                )}
+              </select>
+            </label>
+          </div>
+          <label>Bed *
+            <select value={editBedId} onChange={e => setEditBedId(e.target.value)}>
+              {(properties.find(p => p._id === editPropertyId)?.rooms?.find(r => r._id === editRoomId)?.beds || [])
+                .filter(b => b.status === 'vacant' || b._id === editingMember.bedId)
+                .map(b => <option key={b._id} value={b._id}>{b.label} {b._id === editingMember.bedId ? '(Currently Occupied by user)' : `(₹${b.monthlyRent}/mo)`}</option>)
+              }
+              {(properties.find(p => p._id === editPropertyId)?.rooms?.find(r => r._id === editRoomId)?.beds || [])
+                .filter(b => b.status === 'vacant' || b._id === editingMember.bedId).length === 0 && <option value="">No vacant beds available</option>
+              }
+            </select>
+          </label>
+        </div>
+      )}
+
+      <div className="role-explainer">
+        <ShieldCheck/>
+        <span>
+          <b>{editRole==='owner'?'Full owner access':editRole==='staff'?'Operational access':'Personal resident access'}</b>
+          <small>{roleCopy[editRole]}</small>
+        </span>
+      </div>
+      <div className="modal-actions">
+        <button type="button" className="secondary" onClick={() => setEditingMember(null)}>Cancel</button>
+        <button className="primary" disabled={updating}>{updating ? 'Updating…' : 'Save Changes'}</button>
+      </div>
     </form></div>}
   </div>;
 }
@@ -493,12 +778,18 @@ function Metric({icon, label, value, note, positive, danger}) {
   return <article className="metric card"><div className="metric-top"><span>{icon}</span><TrendingUp size={17}/></div><small>{label}</small><strong>{value}</strong><p className={danger ? 'danger-text' : positive ? 'positive-text' : ''}>{positive && '↗ '}{note}</p></article>;
 }
 
-function RoomsPage({ session, property, onUpdate }) {
+function RoomsPage({ session, property, members = [], onUpdate }) {
   const [rooms, setRooms] = useState([]);
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(null);
   const [toast, setToast] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const getOccupantName = (bedId) => {
+    if (!members || members.length === 0) return null;
+    const occ = members.find(m => m.role === 'resident' && m.bedId?.toString() === bedId?.toString());
+    return occ ? occ.name : null;
+  };
 
   useEffect(() => {
     if (property) {
@@ -633,17 +924,20 @@ function RoomsPage({ session, property, onUpdate }) {
                   </div>
 
                   <div className="bed-list">
-                    {room.beds.map((bed, idx) => (
-                      <div key={bed._id || idx} className="bed-item">
-                        <div className="bed-info">
-                          <span className={`bed-dot ${bed.status || 'vacant'}`} />
-                          <span>{bed.label}</span>
+                    {room.beds.map((bed, idx) => {
+                      const occupantName = getOccupantName(bed._id);
+                      return (
+                        <div key={bed._id || idx} className="bed-item">
+                          <div className="bed-info">
+                            <span className={`bed-dot ${bed.status || 'vacant'}`} />
+                            <span>{bed.label}</span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'capitalize' }}>
+                            {occupantName ? `Occupied: ${occupantName}` : bed.status}
+                          </span>
                         </div>
-                        <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'capitalize' }}>
-                          {bed.status}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="room-card-footer">

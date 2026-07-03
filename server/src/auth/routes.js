@@ -30,7 +30,7 @@ router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!isDbConnected()) {
     if (email === 'owner@stayzen.demo' && password === 'demo1234') {
-      return res.json({ accessToken: jwt.sign({ sub: 'demo-owner', platformRole: 'user' }, accessSecret(), { expiresIn: '15m' }), user: { name: 'Adarsh Kumar', role: 'owner' }, organizations: [{ id: 'demo-org', name: 'Greenview Residency', role: 'owner' }] });
+      return res.json({ accessToken: jwt.sign({ sub: 'demo-owner', platformRole: 'user' }, accessSecret(), { expiresIn: '15m' }), user: { name: 'Adarsh Kumar', email: 'owner@stayzen.demo', role: 'owner' }, organizations: [{ id: 'demo-org', name: 'Greenview Residency', role: 'owner' }] });
     }
     return res.status(401).json({ message: 'Incorrect email or password. Please use the demo credentials when MongoDB is offline.' });
   }
@@ -38,7 +38,7 @@ router.post('/login', async (req, res) => {
   if (!user || !(await user.verifyPassword(password))) return res.status(401).json({ message: 'Incorrect email or password.' });
   const memberships = await Membership.find({ userId: user.id, status: 'active' }).populate('organizationId', 'name status').lean();
   const refreshToken = jwt.sign({ sub: user.id, type: 'refresh' }, refreshSecret(), { expiresIn: '30d' });
-  res.json({ accessToken: signAccess(user), refreshToken, user: { id: user.id, name: user.name, platformRole: user.platformRole }, organizations: memberships.map(m => ({ id: m.organizationId._id, name: m.organizationId.name, role: m.role, status: m.organizationId.status })) });
+  res.json({ accessToken: signAccess(user), refreshToken, user: { id: user.id, name: user.name, email: user.email, platformRole: user.platformRole }, organizations: memberships.map(m => ({ id: m.organizationId._id, name: m.organizationId.name, role: m.role, status: m.organizationId.status })) });
 });
 
 router.post('/accept-invite', async (req, res) => {

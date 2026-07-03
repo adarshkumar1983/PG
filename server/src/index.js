@@ -7,6 +7,14 @@ import authRoutes from './auth/routes.js';
 import tenantRoutes from './routes/tenant.js';
 import adminRoutes from './routes/admin.js';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load environment variables from different possible locations
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 const app = express();
 app.use(cors());
