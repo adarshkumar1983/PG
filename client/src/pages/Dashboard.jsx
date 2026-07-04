@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
   IndianRupee, FileText, HelpCircle, LayoutDashboard, LogOut, Menu,
@@ -37,6 +37,46 @@ export function Dashboard({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState(false);
   const [toast, setToast] = useState('');
+
+  const [coords, setCoords] = useState({ top: 0, height: 0 });
+  const [ready, setReady] = useState(false);
+  const navContainerRef = useRef(null);
+  const activeBtnRef = useRef(null);
+
+  useEffect(() => {
+    const updateCoords = () => {
+      if (activeBtnRef.current && navContainerRef.current) {
+        const containerRect = navContainerRef.current.getBoundingClientRect();
+        const btnRect = activeBtnRef.current.getBoundingClientRect();
+        setCoords({
+          top: btnRect.top - containerRect.top,
+          height: btnRect.height
+        });
+        if (!ready) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setReady(true);
+            });
+          });
+        }
+      }
+    };
+
+    updateCoords();
+
+    let observer;
+    if (navContainerRef.current) {
+      observer = new ResizeObserver(updateCoords);
+      observer.observe(navContainerRef.current);
+    }
+
+    const timer = setTimeout(updateCoords, 100);
+
+    return () => {
+      if (observer) observer.disconnect();
+      clearTimeout(timer);
+    };
+  }, [active, ready]);
 
   const refreshDashboardData = useCallback(() => {
     const fetchDashboard = fetch('/api/tenant/dashboard', {
@@ -152,10 +192,22 @@ export function Dashboard({ session, onLogout }) {
           )}
         </div>
 
-        <nav>
+        <nav ref={navContainerRef}>
+          <div 
+            className="nav-indicator" 
+            style={{
+              transform: `translateY(${coords.top}px)`,
+              height: `${coords.height}px`,
+              opacity: coords.height ? 1 : 0,
+              transition: ready 
+                ? 'transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), height 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s' 
+                : 'none'
+            }}
+          />
           {visibleNav.map(([label, Icon]) => (
             <button 
               key={label} 
+              ref={active === label ? activeBtnRef : null}
               className={active === label ? 'active' : ''} 
               onClick={() => {
                 setActive(label);
