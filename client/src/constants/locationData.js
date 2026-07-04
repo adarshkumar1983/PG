@@ -1,0 +1,43 @@
+export const INDIAN_CITIES_MAP = {
+  'bengaluru': { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+  'bangalore': { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+  'mumbai': { city: 'Mumbai', state: 'Maharashtra', pincode: '400001' },
+  'pune': { city: 'Pune', state: 'Maharashtra', pincode: '411001' },
+  'delhi': { city: 'Delhi', state: 'Delhi', pincode: '110001' },
+  'new delhi': { city: 'New Delhi', state: 'Delhi', pincode: '110001' },
+  'hyderabad': { city: 'Hyderabad', state: 'Telangana', pincode: '500001' },
+  'secunderabad': { city: 'Secunderabad', state: 'Telangana', pincode: '500003' },
+  'chennai': { city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
+  'kolkata': { city: 'Kolkata', state: 'West Bengal', pincode: '700001' },
+  'noida': { city: 'Noida', state: 'Uttar Pradesh', pincode: '201301' },
+  'gurugram': { city: 'Gurugram', state: 'Haryana', pincode: '122001' },
+  'gurgaon': { city: 'Gurugram', state: 'Haryana', pincode: '122001' },
+  'ahmedabad': { city: 'Ahmedabad', state: 'Gujarat', pincode: '380001' },
+  'surat': { city: 'Surat', state: 'Gujarat', pincode: '395003' },
+  'jaipur': { city: 'Jaipur', state: 'Rajasthan', pincode: '302001' },
+  'lucknow': { city: 'Lucknow', state: 'Uttar Pradesh', pincode: '226001' },
+  'kanpur': { city: 'Kanpur', state: 'Uttar Pradesh', pincode: '208001' },
+  'nagpur': { city: 'Nagpur', state: 'Maharashtra', pincode: '440001' },
+  'indore': { city: 'Indore', state: 'Madhya Pradesh', pincode: '452001' },
+  'bhopal': { city: 'Bhopal', state: 'Madhya Pradesh', pincode: '462001' },
+  'patna': { city: 'Patna', state: 'Bihar', pincode: '800001' },
+  'vadodara': { city: 'Vadodara', state: 'Gujarat', pincode: '390001' },
+  'ghaziabad': { city: 'Ghaziabad', state: 'Uttar Pradesh', pincode: '201001' },
+  'ludhiana': { city: 'Ludhiana', state: 'Punjab', pincode: '141001' },
+  'agra': { city: 'Agra', state: 'Uttar Pradesh', pincode: '282001' },
+  'nashik': { city: 'Nashik', state: 'Maharashtra', pincode: '422001' },
+  'faridabad': { city: 'Faridabad', state: 'Haryana', pincode: '121001' },
+  'meerut': { city: 'Meerut', state: 'Uttar Pradesh', pincode: '250001' },
+  'rajkot': { city: 'Rajkot', state: 'Gujarat', pincode: '360001' },
+  'kalyan': { city: 'Kalyan', state: 'Maharashtra', pincode: '421301' },
+  'thane': { city: 'Thane', state: 'Maharashtra', pincode: '400601' },
+  'coimbatore': { city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641001' }
+};
+
+export const ALL_INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+];

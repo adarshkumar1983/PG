@@ -37,5 +37,14 @@ app.post('/api/residents', (req, res) => {
   res.status(201).json({ id: crypto.randomUUID(), ...req.body, status: 'draft' });
 });
 
+// Centralized error handling middleware
+app.use((err, req, res, next) => {
+  console.error('API Error:', err);
+  const status = err.status || 500;
+  const message = err.message || 'An unexpected error occurred.';
+  res.status(status).json({ message });
+});
+
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`StayZen API running on http://localhost:${port}`));
+
