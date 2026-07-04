@@ -16,9 +16,20 @@ const nav = [
   ['Payments', WalletCards], ['Expenses', IndianRupee], ['Reports', FileText]
 ];
 
+const emptyData = {
+  property: 'My PG',
+  owner: 'Owner',
+  month: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+  stats: { residents: 0, rooms: 0, occupiedBeds: 0, totalBeds: 0, collected: 0, pending: 0 },
+  attention: [],
+  payments: [],
+  role: 'owner'
+};
+
 export function Dashboard({ session, onLogout }) {
   console.log('CURRENT SESSION:', session);
-  const [data, setData] = useState(fallback);
+  const [data, setData] = useState(emptyData);
+  const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [members, setMembers] = useState([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
@@ -28,14 +39,15 @@ export function Dashboard({ session, onLogout }) {
   const [toast, setToast] = useState('');
 
   const refreshDashboardData = useCallback(() => {
-    fetch('/api/tenant/dashboard', {
+    const fetchDashboard = fetch('/api/tenant/dashboard', {
       headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
     })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(result => result.stats ? setData(result) : null)
-      .catch(() => {});
+      .then(result => {
+        if (result.stats) setData(result);
+      });
     
-    fetch('/api/tenant/properties', {
+    const fetchProperties = fetch('/api/tenant/properties', {
       headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
     })
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -44,22 +56,26 @@ export function Dashboard({ session, onLogout }) {
         if (result.length > 0 && !selectedPropertyId) {
           setSelectedPropertyId(result[0]._id);
         }
-      })
-      .catch(() => {});
+      });
 
-    fetch('/api/tenant/members', {
+    const fetchMembers = fetch('/api/tenant/members', {
       headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
     })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(result => {
         setMembers(result);
-      })
-      .catch(() => {});
+      });
+
+    Promise.allSettled([fetchDashboard, fetchProperties, fetchMembers])
+      .finally(() => {
+        setLoading(false);
+      });
   }, [session, selectedPropertyId]);
 
   useEffect(() => {
     refreshDashboardData();
   }, [session]);
+
 
   const activeProperty = useMemo(() => properties.find(p => p._id === selectedPropertyId), [properties, selectedPropertyId]);
 
@@ -93,7 +109,20 @@ export function Dashboard({ session, onLogout }) {
     return nav;
   }, [data.role]);
 
+  if (loading) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: '#f4f6f3', color: '#1b2724', fontFamily: 'Manrope, Arial, sans-serif' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Building2 size={48} style={{ color: '#0b4438', marginBottom: '16px' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Loading StayZen...</h2>
+          <p style={{ fontSize: '13px', color: '#85908c', marginTop: '6px' }}>Fetching your workspace details</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
+
     <div className="app-shell">
       <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
