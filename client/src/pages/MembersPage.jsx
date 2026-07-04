@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, ShieldCheck, Mail, Users, Building2, MoreHorizontal, X } from 'lucide-react';
+import { Search, Plus, ShieldCheck, Mail, Users, Building2, MoreHorizontal, X, ChevronDown } from 'lucide-react';
 
 export function MembersPage({ session, properties = [], onRefresh }) {
   const seed = [
@@ -13,7 +13,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '' });
   const [toast, setToast] = useState('');
-  
+
   const [editingMember, setEditingMember] = useState(null);
   const [editRole, setEditRole] = useState('staff');
   const [editPropertyId, setEditPropertyId] = useState('');
@@ -33,7 +33,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setMembers)
-      .catch(() => {});
+      .catch(() => { });
   }, [session]);
 
   const handlePropertyChange = (propId) => {
@@ -85,7 +85,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const startEditing = (m) => {
     setEditingMember(m);
     setEditRole(m.role);
-    
+
     const propId = m.propertyId || properties[0]?._id || '';
     const prop = properties.find(p => p._id === propId);
     const roomId = m.roomId || prop?.rooms?.[0]?._id || '';
@@ -136,7 +136,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Failed to resend invitation');
-      
+
       setMembers(prev => prev.map(item => item.id === result.id ? result : item));
       triggerToast(`Invitation email sent automatically to ${m.email || m.mobile}!`);
     } catch (err) {
@@ -209,7 +209,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     staff: 'Manage residents, payments, occupancy and expenses',
     resident: 'View own rent, receipts and raise complaints'
   };
-  
+
   const getAllocationText = (m) => {
     if (m.role !== 'resident') return roleCopy[m.role];
     if (!m.propertyId) return 'Resident (Not allocated)';
@@ -281,9 +281,9 @@ export function MembersPage({ session, properties = [], onRefresh }) {
           {members.map(m => (
             <div className="member-row" key={m.id}>
               <span className="member-person">
-                <i>{m.name.split(' ').map(x => x[0]).slice(0, 2).join('')}</i>
+                <i>{m.name ? m.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'M'}</i>
                 <span>
-                  <b>{m.name}</b>
+                  <b>{m.name || 'Invited User'}</b>
                   <small>{m.email}</small>
                 </span>
               </span>
@@ -314,7 +314,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
             <h2>Add PG member</h2>
             <p>They’ll receive an invitation to join your PG workspace.</p>
             {error && <div className="form-error">{error}</div>}
-            
+
             <label>Full name *
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Member name" />
             </label>
@@ -326,7 +326,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} placeholder="+91 98765 43210" />
               </label>
             </div>
-            
+
             <label>Member role
               <select value={form.role} onChange={e => handleRoleChange(e.target.value)}>
                 <option value="owner">Owner / Admin</option>
@@ -334,7 +334,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <option value="resident">Resident / Tenant</option>
               </select>
             </label>
-            
+
             {form.role === 'resident' && properties.length > 0 && (
               <div style={{ marginTop: '14px', borderTop: '1px dashed #dce3de', paddingTop: '14px' }}>
                 <p className="eyebrow" style={{ marginBottom: '8px' }}>Room Allocation</p>
@@ -376,7 +376,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <small>{roleCopy[form.role]}</small>
               </span>
             </div>
-            
+
             <div className="modal-actions">
               <button type="button" className="secondary" onClick={handleClose}>Cancel</button>
               <button className="primary" disabled={saving}>{saving ? 'Adding…' : 'Add and invite member'}</button>
@@ -393,7 +393,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
             <h2>Change member role / allocation</h2>
             <p>Update the access level and room allocation for <b>{editingMember.name}</b>.</p>
             {editError && <div className="form-error">{editError}</div>}
-            
+
             <label>Member role
               <select value={editRole} onChange={e => handleEditRoleChange(e.target.value)}>
                 <option value="owner">Owner / Admin</option>
@@ -441,9 +441,9 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <p className="eyebrow" style={{ color: '#9b6919', marginBottom: '4px' }}>Pending Invitation</p>
                 <div style={{ background: '#fff9e6', border: '1px solid #ffe8cc', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#9b6919', fontWeight: '500', lineHeight: '1.4', textAlign: 'left' }}>User has not registered yet. If they lost or missed their link:</span>
-                  <button 
-                    type="button" 
-                    className="primary" 
+                  <button
+                    type="button"
+                    className="primary"
                     onClick={() => {
                       const memberToResend = editingMember;
                       setEditingMember(null);
@@ -464,7 +464,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <small>{roleCopy[editRole]}</small>
               </span>
             </div>
-            
+
             <div className="modal-actions">
               <button type="button" className="secondary" onClick={() => setEditingMember(null)}>Cancel</button>
               <button className="primary" disabled={updating}>{updating ? 'Updating…' : 'Save Changes'}</button>
@@ -472,7 +472,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
           </form>
         </div>
       )}
-      
+
       {toast && <div className="toast">✓ {toast}</div>}
     </div>
   );
