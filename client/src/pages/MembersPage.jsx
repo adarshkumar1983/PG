@@ -13,6 +13,9 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '' });
   const [toast, setToast] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('all');
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
 
   const [editingMember, setEditingMember] = useState(null);
   const [editRole, setEditRole] = useState('staff');
@@ -220,6 +223,28 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     return `Allocated: ${prop.name} · Room ${room?.number || '—'} · ${bed?.label || '—'}`;
   };
 
+  const roleLabels = {
+    all: 'All roles',
+    owner: 'Owners & Admins',
+    staff: 'Staff & Managers',
+    resident: 'Residents / Tenants'
+  };
+
+  const filteredMembers = members.filter(m => {
+    if (selectedRoleFilter !== 'all' && m.role !== selectedRoleFilter) {
+      return false;
+    }
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      return (
+        m.name?.toLowerCase().includes(query) ||
+        m.email?.toLowerCase().includes(query) ||
+        m.mobile?.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  });
+
   return (
     <div className="members-page">
       <div className="setup-heading">
@@ -266,9 +291,86 @@ export function MembersPage({ session, properties = [], onRefresh }) {
         <div className="member-toolbar">
           <div className="search">
             <Search size={17} />
-            <input placeholder="Search by name, email or phone" />
+            <input 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by name, email or phone" 
+            />
           </div>
-          <button className="ghost">All roles <ChevronDown size={15} /></button>
+          <div className="filter-dropdown-container" style={{ position: 'relative' }}>
+            <button 
+              type="button"
+              className="ghost" 
+              onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {roleLabels[selectedRoleFilter]} 
+              <ChevronDown 
+                size={15} 
+                style={{ 
+                  transform: roleMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', 
+                  transition: 'transform 0.2s ease' 
+                }} 
+              />
+            </button>
+            {roleMenuOpen && (
+              <>
+                <div 
+                  className="dropdown-overlay" 
+                  onClick={() => setRoleMenuOpen(false)} 
+                  style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+                />
+                <div 
+                  className="dropdown-menu" 
+                  style={{ 
+                    position: 'absolute', 
+                    right: 0, 
+                    top: 'calc(100% + 6px)', 
+                    background: '#fff', 
+                    border: '1px solid var(--border)', 
+                    borderRadius: '10px', 
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)', 
+                    padding: '6px', 
+                    minWidth: '160px', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '2px', 
+                    zIndex: 100,
+                    animation: 'dropdown-slide 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                  }}
+                >
+                  {Object.entries(roleLabels).map(([roleKey, labelText]) => (
+                    <button
+                      key={roleKey}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRoleFilter(roleKey);
+                        setRoleMenuOpen(false);
+                      }}
+                      style={{
+                        border: 0,
+                        background: selectedRoleFilter === roleKey ? 'var(--mint)' : 'transparent',
+                        color: selectedRoleFilter === roleKey ? 'var(--green)' : '#53605c',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: selectedRoleFilter === roleKey ? '600' : '500',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'background-color 0.15s, color 0.15s'
+                      }}
+                      className="dropdown-item"
+                    >
+                      {labelText}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="member-table">
           <div className="member-row member-head">
@@ -278,7 +380,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
             <span>Contact</span>
             <span />
           </div>
-          {members.map(m => (
+          {filteredMembers.map(m => (
             <div className="member-row" key={m.id}>
               <span className="member-person">
                 <i>{m.name ? m.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'M'}</i>
@@ -303,6 +405,13 @@ export function MembersPage({ session, properties = [], onRefresh }) {
               <button className="more" onClick={() => startEditing(m)} title="Change member role / allocation"><MoreHorizontal size={18} /></button>
             </div>
           ))}
+          {filteredMembers.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)' }}>
+              <Users size={36} style={{ color: '#cedad3', marginBottom: '12px' }} />
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#34423e' }}>No members found</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9aa39f' }}>We couldn't find anyone matching your search or selected role.</p>
+            </div>
+          )}
         </div>
       </section>
 
