@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
-  IndianRupee, FileText, HelpCircle, LayoutDashboard, LogIn, Mail, Menu,
+  IndianRupee, FileText, HelpCircle, LayoutDashboard, LogIn, LogOut, Mail, Menu,
   MoreHorizontal, Plus, Search, Settings, ShieldCheck, TrendingUp, Users, WalletCards, X
 } from 'lucide-react';
 
@@ -317,7 +317,41 @@ function Dashboard({session, onLogout}) {
       <nav>{visibleNav.map(([label, Icon]) => <button key={label} className={active === label ? 'active' : ''} onClick={() => {setActive(label); setMenuOpen(false); !['Overview','My PG','Members','Rooms & beds'].includes(label) && notify(`${label} module is next in the MVP`);}}><Icon size={19}/>{label}{label === 'Payments' && (data.role === 'resident' ? (data.stats.pending > 0 ? <i>1</i> : null) : <i>11</i>)}</button>)}</nav>
       <div className="sidebar-bottom">
         <button><Settings size={19}/>Settings</button><button><HelpCircle size={19}/>Help & support</button>
-        <button className="account" onClick={onLogout} title={session.user?.email || 'No email set'}><span className="avatar small">{session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}</span><span><b>{session.user?.name || 'Adarsh Kumar'}</b><small>{data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : (session.user?.role || 'Owner')} · Sign out</small></span><MoreHorizontal size={18}/></button>
+        <div className="account" title={session.user?.email || 'No email set'}>
+          <span className="avatar small">{session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}</span>
+          <span>
+            <b>{session.user?.name || 'Adarsh Kumar'}</b>
+            <small>{data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : (session.user?.role || 'Owner')}</small>
+          </span>
+          <button 
+            type="button" 
+            className="logout-btn" 
+            onClick={onLogout} 
+            title="Sign out"
+            style={{ 
+              marginLeft: 'auto', 
+              border: 0, 
+              background: 'transparent', 
+              padding: '6px', 
+              borderRadius: '6px', 
+              display: 'grid', 
+              placeItems: 'center', 
+              color: '#bc503d',
+              cursor: 'pointer',
+              transition: 'background 0.2s, color 0.2s'
+            }}
+            onMouseOver={e => {
+              e.currentTarget.style.background = '#fae8e4';
+              e.currentTarget.style.color = '#a94130';
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#bc503d';
+            }}
+          >
+            <LogOut size={18}/>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -741,14 +775,140 @@ function MembersPage({session, properties = [], onRefresh}) {
   </div>;
 }
 
+const INDIAN_CITIES_MAP = {
+  'bengaluru': { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+  'bangalore': { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+  'mumbai': { city: 'Mumbai', state: 'Maharashtra', pincode: '400001' },
+  'pune': { city: 'Pune', state: 'Maharashtra', pincode: '411001' },
+  'delhi': { city: 'Delhi', state: 'Delhi', pincode: '110001' },
+  'new delhi': { city: 'New Delhi', state: 'Delhi', pincode: '110001' },
+  'hyderabad': { city: 'Hyderabad', state: 'Telangana', pincode: '500001' },
+  'secunderabad': { city: 'Secunderabad', state: 'Telangana', pincode: '500003' },
+  'chennai': { city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
+  'kolkata': { city: 'Kolkata', state: 'West Bengal', pincode: '700001' },
+  'noida': { city: 'Noida', state: 'Uttar Pradesh', pincode: '201301' },
+  'gurugram': { city: 'Gurugram', state: 'Haryana', pincode: '122001' },
+  'gurgaon': { city: 'Gurugram', state: 'Haryana', pincode: '122001' },
+  'ahmedabad': { city: 'Ahmedabad', state: 'Gujarat', pincode: '380001' },
+  'surat': { city: 'Surat', state: 'Gujarat', pincode: '395003' },
+  'jaipur': { city: 'Jaipur', state: 'Rajasthan', pincode: '302001' },
+  'lucknow': { city: 'Lucknow', state: 'Uttar Pradesh', pincode: '226001' },
+  'kanpur': { city: 'Kanpur', state: 'Uttar Pradesh', pincode: '208001' },
+  'nagpur': { city: 'Nagpur', state: 'Maharashtra', pincode: '440001' },
+  'indore': { city: 'Indore', state: 'Madhya Pradesh', pincode: '452001' },
+  'bhopal': { city: 'Bhopal', state: 'Madhya Pradesh', pincode: '462001' },
+  'patna': { city: 'Patna', state: 'Bihar', pincode: '800001' },
+  'vadodara': { city: 'Vadodara', state: 'Gujarat', pincode: '390001' },
+  'ghaziabad': { city: 'Ghaziabad', state: 'Uttar Pradesh', pincode: '201001' },
+  'ludhiana': { city: 'Ludhiana', state: 'Punjab', pincode: '141001' },
+  'agra': { city: 'Agra', state: 'Uttar Pradesh', pincode: '282001' },
+  'nashik': { city: 'Nashik', state: 'Maharashtra', pincode: '422001' },
+  'faridabad': { city: 'Faridabad', state: 'Haryana', pincode: '121001' },
+  'meerut': { city: 'Meerut', state: 'Uttar Pradesh', pincode: '250001' },
+  'rajkot': { city: 'Rajkot', state: 'Gujarat', pincode: '360001' },
+  'kalyan': { city: 'Kalyan', state: 'Maharashtra', pincode: '421301' },
+  'thane': { city: 'Thane', state: 'Maharashtra', pincode: '400601' },
+  'coimbatore': { city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641001' }
+};
+
+const ALL_INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+];
+
 function PropertySetup({session, onDone}) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name:'', propertyType:'Mens PG', contactNumber:'', address:'', city:'', state:'Karnataka', pincode:'', gstNumber:'', floors:1, rooms:10, defaultBeds:2, defaultRent:7500, amenities:['Wi-Fi','Power backup'] });
+  const [fetchingPincode, setFetchingPincode] = useState(false);
+  const [citiesList, setCitiesList] = useState([]);
+
+  useEffect(() => {
+    fetch('https://raw.githubusercontent.com/nshntarora/Indian-Cities-JSON/master/cities.json')
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setCitiesList(data.map(item => ({ name: item.name, state: item.state })));
+        }
+      })
+      .catch(err => {
+        console.warn('Could not load online cities list, using local fallback:', err);
+        setCitiesList(Object.values(INDIAN_CITIES_MAP));
+      });
+  }, []);
+
   const amenities = ['Wi-Fi','Power backup','Meals','Laundry','Parking','CCTV','AC','Housekeeping'];
   const update = (key, value) => setForm(current => ({...current,[key]:value}));
   const toggleAmenity = name => update('amenities', form.amenities.includes(name) ? form.amenities.filter(x=>x!==name) : [...form.amenities,name]);
+
+  const handlePincodeChange = async (val) => {
+    const numericVal = val.replace(/\D/g, '').slice(0, 6);
+    update('pincode', numericVal);
+
+    if (numericVal.length === 6) {
+      setFetchingPincode(true);
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${numericVal}`);
+        const data = await res.json();
+        if (data && data[0] && data[0].Status === 'Success' && data[0].PostOffice?.length > 0) {
+          const firstOffice = data[0].PostOffice[0];
+          setForm(prev => ({
+            ...prev,
+            pincode: numericVal,
+            city: firstOffice.District || firstOffice.Block || prev.city,
+            state: firstOffice.State || prev.state
+          }));
+        }
+      } catch (err) {
+        console.error('Pincode lookup error:', err);
+      } finally {
+        setFetchingPincode(false);
+      }
+    }
+  };
+
+  const handleCityChange = (val) => {
+    update('city', val);
+    const key = val.toLowerCase().trim();
+    
+    // 1. Resolve state dynamically from comprehensive list
+    const foundCity = citiesList.find(c => c.name.toLowerCase() === key);
+    if (foundCity) {
+      update('state', foundCity.state);
+    }
+    
+    // 2. Resolve default pincode if it is a major hub
+    if (INDIAN_CITIES_MAP[key]) {
+      const match = INDIAN_CITIES_MAP[key];
+      setForm(prev => ({
+        ...prev,
+        city: match.city,
+        state: match.state,
+        pincode: prev.pincode ? prev.pincode : match.pincode
+      }));
+    }
+  };
+
+  const handleStateChange = (val) => {
+    update('state', val);
+    // Clear city if it does not belong to the selected state
+    if (form.city) {
+      const match = citiesList.find(c => c.name.toLowerCase() === form.city.toLowerCase().trim());
+      if (match && match.state.toLowerCase() !== val.toLowerCase().trim()) {
+        update('city', '');
+      }
+    }
+  };
+
+  const filteredCities = useMemo(() => {
+    if (!form.state) return [];
+    return citiesList.filter(c => c.state.toLowerCase() === form.state.toLowerCase().trim());
+  }, [citiesList, form.state]);
+
   const next = e => { e.preventDefault(); setError(''); if (!form.name || !form.contactNumber || !form.address || !form.city || !form.pincode) return setError('Complete all required property and address fields.'); setStep(2); };
   const submit = async e => {
     e.preventDefault(); setSaving(true); setError('');
@@ -773,7 +933,64 @@ function PropertySetup({session, onDone}) {
     <div className="stepper"><span className={step>=1?'done':''}><i>{step>1?'✓':'1'}</i><b>PG details</b><small>Identity and location</small></span><hr/><span className={step>=2?'done':''}><i>2</i><b>Rooms and pricing</b><small>Initial inventory</small></span><hr/><span><i>3</i><b>Invite residents</b><small>Optional, do later</small></span></div>
     <form className="setup-layout" onSubmit={step===1?next:submit}><section className="card setup-form-card">{step===1 ? <>
       <div className="section-title"><span><Building2/></span><div><h2>PG information</h2><p>Basic details residents will see on receipts and notices.</p></div></div>{error&&<div className="form-error">{error}</div>}
-      <div className="field-grid"><label className="wide">PG name *<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="e.g. Sunrise Men's PG"/></label><label>Property type *<select value={form.propertyType} onChange={e=>update('propertyType',e.target.value)}><option>Mens PG</option><option>Womens PG</option><option>Co-living</option><option>Student hostel</option></select></label><label>Contact number *<input value={form.contactNumber} onChange={e=>update('contactNumber',e.target.value)} placeholder="+91 98765 43210"/></label><label className="wide">Street address *<textarea value={form.address} onChange={e=>update('address',e.target.value)} placeholder="Building, street and landmark"/></label><label>City *<input value={form.city} onChange={e=>update('city',e.target.value)} placeholder="Bengaluru"/></label><label>State *<select value={form.state} onChange={e=>update('state',e.target.value)}><option>Karnataka</option><option>Maharashtra</option><option>Delhi</option><option>Telangana</option><option>Tamil Nadu</option><option>Uttar Pradesh</option><option>Other</option></select></label><label>PIN code *<input value={form.pincode} onChange={e=>update('pincode',e.target.value)} maxLength="6" placeholder="560001"/></label><label>GST number <span>(optional)</span><input value={form.gstNumber} onChange={e=>update('gstNumber',e.target.value.toUpperCase())} placeholder="29ABCDE1234F1Z5"/></label></div>
+      <div className="field-grid">
+        <label className="wide">PG name *<input value={form.name} onChange={e=>update('name',e.target.value)} placeholder="e.g. Sunrise Men's PG"/></label>
+        <label>Property type *<select value={form.propertyType} onChange={e=>update('propertyType',e.target.value)}><option>Mens PG</option><option>Womens PG</option><option>Co-living</option><option>Student hostel</option></select></label>
+        <label>Contact number *<input value={form.contactNumber} onChange={e=>update('contactNumber',e.target.value)} placeholder="+91 98765 43210"/></label>
+        <label className="wide">Street address *<textarea value={form.address} onChange={e=>update('address',e.target.value)} placeholder="Building, street and landmark"/></label>
+        
+        <label>State *
+          <input 
+            value={form.state} 
+            onChange={e=>handleStateChange(e.target.value)} 
+            placeholder="e.g. Karnataka"
+            list="indian-states-list"
+          />
+          <datalist id="indian-states-list">
+            {ALL_INDIAN_STATES.map(s => (
+              <option key={s} value={s}/>
+            ))}
+          </datalist>
+        </label>
+
+        <label style={{position:'relative'}}>City *
+          <input 
+            value={form.city} 
+            onChange={e=>handleCityChange(e.target.value)} 
+            placeholder={form.state ? "e.g. Bengaluru" : "Choose a state first"}
+            disabled={!form.state}
+            list="indian-cities-list"
+          />
+          <datalist id="indian-cities-list">
+            {filteredCities.map((item, idx) => (
+              <option key={`${item.name}-${idx}`} value={item.name}/>
+            ))}
+          </datalist>
+        </label>
+        
+        <label style={{position:'relative'}}>PIN code *
+          <input 
+            value={form.pincode} 
+            onChange={e=>handlePincodeChange(e.target.value)} 
+            maxLength="6" 
+            placeholder="560001"
+          />
+          {fetchingPincode && (
+            <span style={{
+              position: 'absolute',
+              right: '12px',
+              bottom: '12px',
+              fontSize: '11px',
+              color: 'var(--muted)',
+              animation: 'pulse 1.5s infinite'
+            }}>
+              Loading...
+            </span>
+          )}
+        </label>
+        
+        <label>GST number <span>(optional)</span><input value={form.gstNumber} onChange={e=>update('gstNumber',e.target.value.toUpperCase())} placeholder="29ABCDE1234F1Z5"/></label>
+      </div>
       <div className="amenity-block"><h3>Amenities</h3><p>Select everything available at this property.</p><div>{amenities.map(item=><button type="button" key={item} className={form.amenities.includes(item)?'selected':''} onClick={()=>toggleAmenity(item)}>{form.amenities.includes(item)?'✓ ':'+ '}{item}</button>)}</div></div>
     </> : <>
       <div className="section-title"><span><BedDouble/></span><div><h2>Rooms, beds and pricing</h2><p>Create a starter inventory. Every room can be edited after setup.</p></div></div>{error&&<div className="form-error">{error}</div>}

@@ -55,41 +55,34 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
   fs.writeFileSync(localFilePath, emailHtml);
   console.log(`[SMTP SIMULATION] Invitation HTML written to: ${localFilePath}`);
 
-  console.log('\n--- SMTP DEBUG START ---');
-  console.log('SMTP_HOST:', process.env.SMTP_HOST);
-  console.log('SMTP_PORT:', process.env.SMTP_PORT);
-  console.log('SMTP_USER:', process.env.SMTP_USER);
-  console.log('SMTP_PASS:', process.env.SMTP_PASS ? `[Exists, Length: ${process.env.SMTP_PASS.length}, Value: "${process.env.SMTP_PASS}"]` : '[Missing]');
-  console.log('--- SMTP DEBUG END ---\n');
-
-  const isPlaceholder = !process.env.SMTP_USER || 
-                        process.env.SMTP_USER.includes('your-email') || 
-                        !process.env.SMTP_PASS || 
-                        process.env.SMTP_PASS === 'your-gmail-app-password' || 
-                        process.env.SMTP_PASS === 'abcdefghijklmnop';
+  const isPlaceholder = !process.env.SMTP_USER ||
+    process.env.SMTP_USER.includes('your-email') ||
+    !process.env.SMTP_PASS ||
+    process.env.SMTP_PASS === 'your-gmail-app-password' ||
+    process.env.SMTP_PASS === 'abcdefghijklmnop';
 
   const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
 
   if (hasSmtpConfig) {
     try {
       const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com';
-      const transportConfig = isGmail 
+      const transportConfig = isGmail
         ? {
-            service: 'gmail',
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS
-            }
+          service: 'gmail',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
           }
+        }
         : {
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_SECURE === 'true',
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS
-            }
-          };
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        };
 
       const transporter = nodemailer.createTransport(transportConfig);
 
