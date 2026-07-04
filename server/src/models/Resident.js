@@ -4,7 +4,7 @@ const residentSchema = new mongoose.Schema({
   organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   propertyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true, index: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  name: { type: String, required: true }, mobile: { type: String, required: true }, email: String,
+  name: { type: String, required: true }, mobile: { type: String }, email: String,
   emergencyContact: { name: String, relation: String, mobile: String },
   checkInDate: { type: Date, required: true }, checkOutDate: Date, agreementEndsAt: Date,
   securityDeposit: { type: Number, min: 0, default: 0 }, roomId: mongoose.Schema.Types.ObjectId,

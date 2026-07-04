@@ -193,3 +193,13 @@ export const updateMockMemberRole = (id, role, propertyId, roomId, bedId) => {
   }
   return null;
 };
+
+export const resendMockInvite = (id) => {
+  const member = mockMembers.find(m => m.id === id);
+  if (member) {
+    member.status = 'invited';
+    return member;
+  }
+  return null;
+};
+

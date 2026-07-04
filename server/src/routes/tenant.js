@@ -9,12 +9,46 @@ import { Expense, Payment } from '../models/Finance.js';
 import { Membership } from '../models/Membership.js';
 import { User } from '../models/User.js';
 import { dashboard } from '../seed.js';
+import { Organization } from '../models/Organization.js';
+import { sendInviteEmail } from '../utils/mailer.js';
 import * as mockStore from '../mockStore.js';
 
 const router = Router();
 router.use(authenticate, resolveTenant);
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
+
+async function attemptSendInvitation(userEmail, userMobile, userName, role, organizationId, inviteLink) {
+  try {
+    let orgName = 'StayZen';
+    if (isDbConnected()) {
+      const org = await Organization.findById(organizationId).lean();
+      if (org && org.name) {
+        orgName = org.name;
+      }
+    } else {
+      const prop = mockStore.mockProperties.find(p => p.organizationId === organizationId);
+      if (prop && prop.name) {
+        orgName = prop.name;
+      }
+    }
+
+    // 1. Send SMS if mobile number is provided
+    if (userMobile) {
+      console.log(`\n========================================`);
+      console.log(`[SMS SIMULATION] Automatic SMS sent to ${userMobile}:`);
+      console.log(`"Hello ${userName}, you have been invited to join the ${orgName} workspace on StayZen as a ${role}. Accept your invitation here: ${inviteLink}"`);
+      console.log(`========================================\n`);
+    }
+
+    // 2. Send email if email address is provided
+    if (userEmail) {
+      return await sendInviteEmail(userEmail, userName, role, orgName, inviteLink);
+    }
+  } catch (error) {
+    console.error('Error in attemptSendInvitation:', error);
+  }
+}
 
 async function allocateBed(residentId, propertyId, roomId, bedId) {
   if (!propertyId || !roomId || !bedId) return;
@@ -286,10 +320,33 @@ router.get('/properties', authorize(permissions.RESIDENT_READ), async (req, res)
   if (!isDbConnected()) return res.json(mockStore.mockProperties);
   res.json(await Property.find(tenantFilter(req)).lean());
 });
+function cleanTemporaryIds(rooms) {
+  if (!Array.isArray(rooms)) return rooms;
+  return rooms.map(room => {
+    const cleanedRoom = { ...room };
+    if (cleanedRoom._id && !mongoose.Types.ObjectId.isValid(cleanedRoom._id)) {
+      delete cleanedRoom._id;
+    }
+    if (Array.isArray(cleanedRoom.beds)) {
+      cleanedRoom.beds = cleanedRoom.beds.map(bed => {
+        const cleanedBed = { ...bed };
+        if (cleanedBed._id && !mongoose.Types.ObjectId.isValid(cleanedBed._id)) {
+          delete cleanedBed._id;
+        }
+        return cleanedBed;
+      });
+    }
+    return cleanedRoom;
+  });
+}
+
 router.post('/properties', authorize(permissions.MANAGE_PG), async (req, res) => {
   if (!isDbConnected()) {
     const newProp = mockStore.addMockProperty(req.body);
     return res.status(201).json(newProp);
+  }
+  if (req.body.rooms && Array.isArray(req.body.rooms)) {
+    req.body.rooms = cleanTemporaryIds(req.body.rooms);
   }
   res.status(201).json(await Property.create({ ...req.body, organizationId: req.tenant.organizationId }));
 });
@@ -298,6 +355,9 @@ router.put('/properties/:id', authorize(permissions.MANAGE_PG), async (req, res)
     const updatedProp = mockStore.updateMockProperty(req.params.id, req.body);
     if (!updatedProp) return res.status(404).json({ message: 'Property not found' });
     return res.json(updatedProp);
+  }
+  if (req.body.rooms && Array.isArray(req.body.rooms)) {
+    req.body.rooms = cleanTemporaryIds(req.body.rooms);
   }
   const filter = tenantFilter(req);
   const updatedProperty = await Property.findOneAndUpdate(
@@ -332,7 +392,7 @@ router.get('/members', authorize(permissions.STAFF_MANAGE), async (req, res) => 
 });
 router.post('/members', authorize(permissions.STAFF_MANAGE), async (req, res) => {
   const { name, email, mobile, role, propertyId, roomId, bedId } = req.body;
-  if (!name || (!email && !mobile) || !['owner','staff','resident'].includes(role)) return res.status(400).json({ message:'Name, contact and a valid role are required.' });
+  if (!name || !email || !['owner','staff','resident'].includes(role)) return res.status(400).json({ message:'Name, email address and a valid role are required.' });
   
   const accessSecret = process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
 
@@ -340,6 +400,7 @@ router.post('/members', authorize(permissions.STAFF_MANAGE), async (req, res) =>
     const mockMem = mockStore.addMockMember({ name, email, mobile, role, propertyId, roomId, bedId });
     const inviteToken = jwt.sign({ membershipId: mockMem.id, email: email || mobile }, accessSecret, { expiresIn: '7d' });
     const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+    attemptSendInvitation(email, mobile, name, role, req.tenant.organizationId, inviteLink);
     return res.status(201).json({ ...mockMem, inviteLink });
   }
   
@@ -377,6 +438,8 @@ router.post('/members', authorize(permissions.STAFF_MANAGE), async (req, res) =>
     
     const inviteToken = jwt.sign({ membershipId: membership.id, email: user.email || user.mobile }, accessSecret, { expiresIn: '7d' });
     const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+    
+    attemptSendInvitation(user.email, user.mobile, user.name, role, req.tenant.organizationId, inviteLink);
     
     res.status(201).json({
       id: membership.id,
@@ -482,6 +545,57 @@ router.put('/members/:id', authorize(permissions.STAFF_MANAGE), async (req, res)
   } catch (error) {
     console.error('Error updating member:', error);
     res.status(500).json({ message: error.message || 'An error occurred while updating the member role.' });
+  }
+});
+router.post('/members/:id/resend-invite', authorize(permissions.STAFF_MANAGE), async (req, res) => {
+  const accessSecret = process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
+
+  if (!isDbConnected()) {
+    const updated = mockStore.resendMockInvite(req.params.id);
+    if (!updated) return res.status(404).json({ message: 'Mock member not found' });
+    const inviteToken = jwt.sign({ membershipId: updated.id, email: updated.email || updated.mobile }, accessSecret, { expiresIn: '7d' });
+    const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+    attemptSendInvitation(updated.email, updated.mobile, updated.name, updated.role, req.tenant.organizationId, inviteLink);
+    return res.json({ ...updated, inviteLink });
+  }
+
+  try {
+    const filter = tenantFilter(req);
+    const membership = await Membership.findOne({ _id: req.params.id, organizationId: filter.organizationId });
+    if (!membership) {
+      return res.status(404).json({ message: 'Member not found.' });
+    }
+
+    membership.status = 'invited';
+    await membership.save();
+
+    const user = await User.findById(membership.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User associated with member not found.' });
+    }
+
+    const inviteToken = jwt.sign({ membershipId: membership.id, email: user.email || user.mobile }, accessSecret, { expiresIn: '7d' });
+    const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+
+    attemptSendInvitation(user.email, user.mobile, user.name, membership.role, filter.organizationId, inviteLink);
+
+    const resident = await Resident.findOne({ organizationId: filter.organizationId, userId: membership.userId });
+
+    res.json({
+      id: membership.id,
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      role: membership.role,
+      status: 'invited',
+      inviteLink,
+      propertyId: resident?.propertyId,
+      roomId: resident?.roomId,
+      bedId: resident?.bedId
+    });
+  } catch (error) {
+    console.error('Error resending invitation:', error);
+    res.status(500).json({ message: error.message || 'An error occurred while resending the invitation.' });
   }
 });
 router.get('/payments', authorize(permissions.PAYMENT_READ), async (req, res) => {
