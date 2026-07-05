@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AcceptInvite from './pages/AcceptInvite.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import { getThemeSetting, applyTheme } from './utils/theme.js';
 
 // Automatically handle expired tokens or secret key changes by resetting the session on 401
 const originalFetch = window.fetch;
@@ -19,6 +20,23 @@ window.fetch = async (...args) => {
  * Root App component acting as the client-side router
  */
 function App() {
+  useEffect(() => {
+    // Apply current theme settings
+    const currentSetting = getThemeSetting();
+    applyTheme(currentSetting);
+
+    // Listen for system theme change dynamically
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemChange = () => {
+      if (getThemeSetting() === 'system') {
+        applyTheme('system');
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleSystemChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemChange);
+  }, []);
+
   const [session, setSession] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('stayzen-session'));

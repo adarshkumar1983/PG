@@ -120,11 +120,11 @@ export function RoomsPage({ session, property, members = [], onUpdate }) {
         </article>
         <article className="card metric" style={{ padding: '16px' }}>
           <small>Vacant Beds</small>
-          <strong style={{ color: '#287154' }}>{vacantBeds}</strong>
+          <strong style={{ color: 'var(--color-success)' }}>{vacantBeds}</strong>
         </article>
         <article className="card metric" style={{ padding: '16px' }}>
           <small>Maintenance</small>
-          <strong style={{ color: '#9b6919' }}>{maintenanceBeds}</strong>
+          <strong style={{ color: 'var(--color-warning)' }}>{maintenanceBeds}</strong>
         </article>
       </div>
 

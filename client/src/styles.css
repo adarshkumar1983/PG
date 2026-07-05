@@ -2,13 +2,16 @@
 
 :root {
   font-family: 'DM Sans', sans-serif;
-  color: #1b2724;
-  background: #f4f6f3;
   font-synthesis: none;
   --green: #0b4438;
   --mint: #dff0e8;
   --border: #e4e9e5;
-  --muted: #6c7874
+  --muted: #6c7874;
+  --app-bg: #f4f6f3;
+  --text-primary: #1b2724;
+
+  color: var(--text-primary);
+  background: var(--app-bg);
 }
 
 * {
@@ -2071,4 +2074,742 @@ header {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* ==========================================================================
+   Apple Premium Dark Mode & Semantic Theme System
+   ========================================================================== */
+
+/* Global Transition Settings */
+body,
+.sidebar,
+header,
+.card,
+.property-switch,
+.property-icon,
+.search,
+nav button,
+.sidebar-bottom>button,
+.account,
+.tr,
+.modal,
+.modal-x,
+.modal input,
+.modal select,
+.member-modal select,
+.field-grid input,
+.field-grid select,
+.field-grid textarea,
+.secondary,
+.attention-row,
+.amenity-block button,
+.inventory-preview {
+  transition: background-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+    border-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+    color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+    box-shadow 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Light Mode Defaults & Semantic Variable Definitions */
+:root {
+  --transition-speed: 0.35s;
+  --transition-ease: cubic-bezier(0.25, 0.8, 0.25, 1);
+
+  /* Semantic Core */
+  --app-bg: #f4f6f3;
+  --text-primary: #1b2724;
+  --text-secondary: #53605c;
+  --text-muted: #6c7874;
+
+  /* Sidebar */
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e4e9e5;
+  --sidebar-hover-bg: rgba(11, 68, 56, 0.05);
+  --sidebar-active-bg: #e7f0eb;
+
+  /* Header */
+  --header-bg: rgba(255, 255, 255, 0.8);
+  --header-border: #e4e9e5;
+
+  /* Cards */
+  --card-bg: #ffffff;
+  --card-border: #e4e9e5;
+
+  /* Inputs */
+  --input-bg: #ffffff;
+  --input-border: #dce3de;
+  --input-focus-border: #407f6d;
+  --input-focus-shadow: rgba(64, 127, 109, 0.15);
+
+  /* Buttons */
+  --btn-secondary-bg: #ffffff;
+  --btn-secondary-border: #e4e9e5;
+
+  /* Modals */
+  --modal-backdrop: rgba(20, 34, 29, 0.6);
+  --modal-bg: #ffffff;
+
+  /* Tables */
+  --table-head-bg: #fafbfa;
+  --table-row-hover: #fafbfa;
+
+  /* Status/Pill Defaults */
+  --color-success: #287154;
+  --color-success-bg: #e3f1e9;
+  --color-warning: #9b6919;
+  --color-warning-bg: #fff0d7;
+  --color-danger: #b34735;
+  --color-danger-bg: #fae7e2;
+  --color-info: #3c718d;
+  --color-info-bg: #e3eef5;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(27, 39, 36, 0.05);
+  --shadow-md: 0 4px 12px rgba(27, 39, 36, 0.08);
+  --shadow-lg: 0 12px 30px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.15);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(228, 233, 229, 0.6);
+}
+
+/* Dark Mode Overrides */
+[data-theme="dark"] {
+  --green: #2fa881;
+  --mint: #173d32;
+  --border: #2c2e31;
+  --muted: #8b9296;
+
+  /* Semantic Core */
+  --app-bg: #0d0e10;
+  --text-primary: #f3f5f6;
+  --text-secondary: #a0a6aa;
+  --text-muted: #7c8286;
+
+  /* Sidebar */
+  --sidebar-bg: #121314;
+  --sidebar-border: #212326;
+  --sidebar-hover-bg: rgba(47, 168, 129, 0.08);
+  --sidebar-active-bg: #182a24;
+
+  /* Header */
+  --header-bg: rgba(18, 19, 20, 0.85);
+  --header-border: #212326;
+
+  /* Cards */
+  --card-bg: #161719;
+  --card-border: #26272b;
+
+  /* Inputs */
+  --input-bg: #1e2022;
+  --input-border: #2d3034;
+  --input-focus-border: #2fa881;
+  --input-focus-shadow: rgba(47, 168, 129, 0.25);
+
+  /* Buttons */
+  --btn-secondary-bg: #1e2022;
+  --btn-secondary-border: #2d3034;
+
+  /* Modals */
+  --modal-backdrop: rgba(0, 0, 0, 0.75);
+  --modal-bg: #1c1d20;
+
+  /* Tables */
+  --table-head-bg: #131416;
+  --table-row-hover: #1c1d20;
+
+  /* Status/Pills */
+  --color-success: #34c759;
+  --color-success-bg: #183520;
+  --color-warning: #ff9f0a;
+  --color-warning-bg: #382405;
+  --color-danger: #ff453a;
+  --color-danger-bg: #351515;
+  --color-info: #0a84ff;
+  --color-info-bg: #072547;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 30px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.6);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(22, 23, 25, 0.8);
+  --glass-border: rgba(44, 46, 49, 0.6);
+}
+
+/* Base Overrides */
+body {
+  color: var(--text-primary);
+  background: var(--app-bg);
+}
+
+/* Sidebar Theme Implementation */
+.sidebar {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.brand {
+  border-bottom: 1px solid var(--sidebar-border);
+  color: var(--text-primary);
+}
+
+.brand-mark {
+  background: var(--green);
+}
+
+.property-switch {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+}
+
+.property-switch:hover {
+  background-color: var(--sidebar-hover-bg);
+  border-color: var(--green);
+}
+
+.property-switch b,
+.account b {
+  color: var(--text-primary);
+}
+
+.property-icon {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.nav-indicator {
+  background: var(--sidebar-active-bg);
+}
+
+nav button,
+.sidebar-bottom>button {
+  color: var(--sidebar-text);
+}
+
+nav button.active {
+  color: var(--sidebar-active-text);
+  background-color: var(--sidebar-active-bg);
+}
+
+nav button:not(.active):hover,
+.sidebar-bottom>button:hover {
+  background-color: var(--sidebar-hover-bg);
+  color: var(--sidebar-active-text);
+}
+
+.account {
+  border-top: 1px solid var(--sidebar-border);
+  background: transparent !important;
+}
+
+.account:hover {
+  background: var(--sidebar-hover-bg) !important;
+}
+
+/* Header & Navigation */
+header {
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.search {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-secondary);
+}
+
+.search input {
+  color: var(--text-primary);
+}
+
+.search kbd {
+  background: var(--card-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-muted);
+}
+
+.icon-button,
+.menu-button {
+  color: var(--text-secondary);
+}
+
+.icon-button:hover,
+.menu-button:hover {
+  color: var(--text-primary);
+}
+
+/* Welcome Page & Typography */
+.welcome h1 {
+  color: var(--text-primary);
+}
+
+.welcome p {
+  color: var(--text-secondary);
+}
+
+/* Primary Button Apple Spring & Accent Hover */
+.primary {
+  background: var(--green);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.primary:hover {
+  background: var(--green);
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.primary:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Cards & Metrics Dashboard elements */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.metric-top span {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.metric>strong {
+  color: var(--text-primary);
+}
+
+.card-head {
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text-primary);
+}
+
+.card-head h2 {
+  color: var(--text-primary);
+}
+
+.card-head p {
+  color: var(--text-muted);
+}
+
+/* Ghost & Secondary Buttons */
+.ghost {
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-secondary);
+}
+
+.ghost:hover {
+  background-color: var(--sidebar-hover-bg);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.secondary {
+  border: 1px solid var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+  color: var(--text-primary);
+}
+
+.secondary:hover {
+  background: var(--sidebar-hover-bg);
+  border-color: var(--text-secondary);
+}
+
+/* Progress Ring Theme integration */
+.ring:after {
+  background: var(--card-bg);
+}
+
+.ring strong {
+  color: var(--text-primary);
+}
+
+.rent-numbers b {
+  color: var(--text-primary);
+}
+
+.rent-numbers hr {
+  border-top: 1px solid var(--card-border);
+}
+
+/* Alerts & Attention List Rows */
+.attention-row {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text-primary);
+}
+
+.attention-row:hover {
+  background-color: var(--table-row-hover);
+}
+
+.attention-row b {
+  color: var(--text-primary);
+}
+
+/* Tables Styling */
+.table-head {
+  background: var(--table-head-bg);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.tr {
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text-primary);
+}
+
+.tr:not(.table-head):hover {
+  background-color: var(--table-row-hover);
+}
+
+.date {
+  color: var(--text-secondary);
+}
+
+.more {
+  color: var(--text-secondary);
+}
+
+.more:hover {
+  color: var(--text-primary);
+}
+
+/* Modals Overlay & Sheets */
+.modal-backdrop {
+  background: var(--modal-backdrop);
+}
+
+.modal {
+  background: var(--modal-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-xl);
+}
+
+.modal h2 {
+  color: var(--text-primary);
+}
+
+.modal-x {
+  background: var(--input-bg);
+  color: var(--text-secondary);
+}
+
+.modal-x:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.modal-icon {
+  background: var(--mint);
+  color: var(--green);
+}
+
+/* Input Fields, Selectors & Textareas Styling */
+.modal input,
+.modal select,
+.member-modal select,
+.field-grid input,
+.field-grid select,
+.field-grid textarea {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+}
+
+.modal input:focus,
+.modal select:focus,
+.member-modal select:focus,
+.field-grid input:focus,
+.field-grid select:focus,
+.field-grid textarea:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 3px var(--input-focus-shadow);
+}
+
+/* Toast alert notification styling */
+.toast {
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Stepper Setup & Wizard Elements */
+.stepper i {
+  background: var(--input-bg);
+  color: var(--text-secondary);
+}
+
+.stepper b {
+  color: var(--text-primary);
+}
+
+.stepper .done b {
+  color: var(--green);
+}
+
+.stepper .done i {
+  background: var(--green);
+  color: #fff;
+}
+
+.stepper hr {
+  border-top: 1px dashed var(--border);
+}
+
+.setup-form-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+
+.section-title>span {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.section-title h2 {
+  color: var(--text-primary);
+}
+
+.amenity-block button {
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-secondary);
+}
+
+.amenity-block button:hover {
+  background-color: var(--sidebar-hover-bg);
+  color: var(--text-primary);
+}
+
+.amenity-block button.selected {
+  background: var(--mint);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.help-illustration {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.setup-help h3 {
+  color: var(--text-primary);
+}
+
+.setup-help ul {
+  color: var(--text-secondary);
+}
+
+.security-note {
+  color: var(--text-secondary);
+}
+
+.security-note b {
+  color: var(--text-primary);
+}
+
+.inventory-callout {
+  background: var(--mint);
+  border: 1px solid var(--border);
+}
+
+.inventory-callout b {
+  color: var(--green);
+}
+
+.inventory-preview {
+  border: 1px solid var(--border);
+  background: var(--table-head-bg);
+}
+
+.inventory-preview>div>span {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.inventory-preview strong {
+  color: var(--text-primary);
+}
+
+/* Members & Staff Directory elements */
+.member-stats article {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+
+.member-stats article>span {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.member-stats b {
+  color: var(--text-primary);
+}
+
+.member-toolbar {
+  border-bottom: 1px solid var(--card-border);
+}
+
+.member-head {
+  background: var(--table-head-bg);
+  color: var(--text-secondary);
+}
+
+.member-row {
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text-primary);
+}
+
+.member-row:not(.member-head):hover {
+  background-color: var(--table-row-hover);
+}
+
+.member-person>i {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.role-explainer {
+  background: var(--mint);
+  border: 1px solid var(--border);
+  color: var(--green);
+}
+
+.contact-cell {
+  color: var(--text-secondary);
+}
+
+/* Rooms & Beds Configuration floor dividers */
+.floor-title {
+  color: var(--green);
+  border-bottom: 2px solid var(--card-border);
+}
+
+.room-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+
+.room-card:hover {
+  border-color: var(--green);
+}
+
+.room-card-header h3 {
+  color: var(--text-primary);
+}
+
+.room-card-footer {
+  border-top: 1px solid var(--card-border);
+}
+
+.room-card-footer strong {
+  color: var(--green);
+}
+
+.bed-item {
+  color: var(--text-secondary);
+}
+
+.dropdown-item:hover {
+  background-color: var(--sidebar-hover-bg) !important;
+  color: var(--green) !important;
+}
+
+/* Form Error notification */
+.form-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+/* Pill Status Badges styling */
+.pill.paid,
+.member-status.active,
+.badge.ac {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.pill.overdue,
+.badge.maintenance,
+.alert-icon.danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.pill.due-soon,
+.member-status.invited,
+.badge.sharing,
+.alert-icon.warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.badge.non-ac {
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.alert-icon.info {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+/* Scrollbars styling for WebKit */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Logout Button Theme-specific Styles */
+.logout-btn {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+}
+
+.logout-btn:hover {
+  background-color: var(--color-danger-bg) !important;
+  color: var(--color-danger) !important;
+}
+
+.logout-btn:active {
+  transform: scale(0.93);
 }

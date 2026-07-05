@@ -326,10 +326,10 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                     position: 'absolute', 
                     right: 0, 
                     top: 'calc(100% + 6px)', 
-                    background: '#fff', 
-                    border: '1px solid var(--border)', 
+                    background: 'var(--dropdown-bg)', 
+                    border: '1px solid var(--dropdown-border)', 
                     borderRadius: '10px', 
-                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)', 
+                    boxShadow: 'var(--shadow-lg)', 
                     padding: '6px', 
                     minWidth: '160px', 
                     display: 'flex', 
@@ -350,7 +350,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                       style={{
                         border: 0,
                         background: selectedRoleFilter === roleKey ? 'var(--mint)' : 'transparent',
-                        color: selectedRoleFilter === roleKey ? 'var(--green)' : '#53605c',
+                        color: selectedRoleFilter === roleKey ? 'var(--green)' : 'var(--text-secondary)',
                         padding: '8px 12px',
                         borderRadius: '6px',
                         fontSize: '11px',
@@ -397,7 +397,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className={`member-status ${m.status}`}>{m.status}</i>
                   {m.status === 'invited' && (
-                    <button type="button" onClick={() => handleResendInvite(m)} title="Reset & Resend invitation link" style={{ background: '#fff0d7', border: '1px solid #ffe8cc', color: '#9b6919', borderRadius: '6px', cursor: 'pointer', fontSize: '9px', fontWeight: '600', padding: '2px 6px', whiteSpace: 'nowrap', height: '18px', display: 'flex', alignItems: 'center' }}>Resend</button>
+                    <button type="button" onClick={() => handleResendInvite(m)} title="Reset & Resend invitation link" style={{ background: 'var(--color-warning-bg)', border: '1px solid var(--border-color)', color: 'var(--color-warning)', borderRadius: '6px', cursor: 'pointer', fontSize: '9px', fontWeight: '600', padding: '2px 6px', whiteSpace: 'nowrap', height: '18px', display: 'flex', alignItems: 'center' }}>Resend</button>
                   )}
                 </div>
               </span>
@@ -406,10 +406,10 @@ export function MembersPage({ session, properties = [], onRefresh }) {
             </div>
           ))}
           {filteredMembers.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)' }}>
-              <Users size={36} style={{ color: '#cedad3', marginBottom: '12px' }} />
-              <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#34423e' }}>No members found</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9aa39f' }}>We couldn't find anyone matching your search or selected role.</p>
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+              <Users size={36} style={{ color: 'var(--border-color)', marginBottom: '12px' }} />
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>No members found</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--text-secondary)' }}>We couldn't find anyone matching your search or selected role.</p>
             </div>
           )}
         </div>

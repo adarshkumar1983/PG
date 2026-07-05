@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, Building2, ShieldCheck } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export function Login({ onLogin, onSwitchView }) {
   const [email, setEmail] = useState('owner@stayzen.demo');
@@ -46,7 +47,8 @@ export function Login({ onLogin, onSwitchView }) {
         <small>Built for modern PG owners in India</small>
       </section>
 
-      <section className="auth-form-wrap">
+      <section className="auth-form-wrap" style={{ position: 'relative' }}>
+        <ThemeToggle style={{ position: 'absolute', top: '24px', right: '24px' }} />
         <form className="auth-form" onSubmit={submit}>
           <div className="mobile-auth-brand">
             <span className="brand-mark"><Building2 size={20} /></span>StayZen

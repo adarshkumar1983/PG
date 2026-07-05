@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
+import {
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
   IndianRupee, FileText, HelpCircle, LayoutDashboard, LogOut, Menu,
-  MoreHorizontal, Plus, Search, Settings, ShieldCheck, Users, WalletCards, X 
+  MoreHorizontal, Plus, Search, Settings, ShieldCheck, Users, WalletCards, X,
+  Sun, Moon, Monitor
 } from 'lucide-react';
 import { money } from '../utils/formatters.js';
 import { fallback } from '../constants/fallbackData.js';
@@ -10,6 +11,7 @@ import Metric from '../components/Metric.jsx';
 import RoomsPage from './RoomsPage.jsx';
 import MembersPage from './MembersPage.jsx';
 import PropertySetup from './PropertySetup.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
@@ -42,6 +44,8 @@ export function Dashboard({ session, onLogout }) {
   const [ready, setReady] = useState(false);
   const navContainerRef = useRef(null);
   const activeBtnRef = useRef(null);
+
+
 
   useEffect(() => {
     const updateCoords = () => {
@@ -86,7 +90,7 @@ export function Dashboard({ session, onLogout }) {
       .then(result => {
         if (result.stats) setData(result);
       });
-    
+
     const fetchProperties = fetch('/api/tenant/properties', {
       headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
     })
@@ -151,11 +155,11 @@ export function Dashboard({ session, onLogout }) {
 
   if (loading) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: '#f4f6f3', color: '#1b2724', fontFamily: 'Manrope, Arial, sans-serif' }}>
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--app-bg)', color: 'var(--text-primary)', fontFamily: 'Manrope, Arial, sans-serif' }}>
         <div style={{ textAlign: 'center' }}>
-          <Building2 size={48} style={{ color: '#0b4438', marginBottom: '16px' }} />
+          <Building2 size={48} style={{ color: 'var(--green)', marginBottom: '16px' }} />
           <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Loading StayZen...</h2>
-          <p style={{ fontSize: '13px', color: '#85908c', marginTop: '6px' }}>Fetching your workspace details</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>Fetching your workspace details</p>
         </div>
       </div>
     );
@@ -170,7 +174,7 @@ export function Dashboard({ session, onLogout }) {
           <span>StayZen</span>
           <button className="mobile-close" onClick={() => setMenuOpen(false)}><X /></button>
         </div>
-        
+
         <div className="property-switch" style={{ position: 'relative' }}>
           <span className="property-icon"><Building2 size={18} /></span>
           <span style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -180,8 +184,8 @@ export function Dashboard({ session, onLogout }) {
           {data.role !== 'resident' && (
             <>
               <ChevronDown size={16} style={{ position: 'absolute', right: 12, pointerEvents: 'none' }} />
-              <select 
-                value={selectedPropertyId} 
+              <select
+                value={selectedPropertyId}
                 onChange={e => setSelectedPropertyId(e.target.value)}
                 style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
               >
@@ -193,22 +197,22 @@ export function Dashboard({ session, onLogout }) {
         </div>
 
         <nav ref={navContainerRef}>
-          <div 
-            className="nav-indicator" 
+          <div
+            className="nav-indicator"
             style={{
               transform: `translateY(${coords.top}px)`,
               height: `${coords.height}px`,
               opacity: coords.height ? 1 : 0,
-              transition: ready 
-                ? 'transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), height 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s' 
+              transition: ready
+                ? 'transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), height 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s'
                 : 'none'
             }}
           />
           {visibleNav.map(([label, Icon]) => (
-            <button 
-              key={label} 
+            <button
+              key={label}
               ref={active === label ? activeBtnRef : null}
-              className={active === label ? 'active' : ''} 
+              className={active === label ? 'active' : ''}
               onClick={() => {
                 setActive(label);
                 setMenuOpen(false);
@@ -233,19 +237,19 @@ export function Dashboard({ session, onLogout }) {
               <b>{session.user?.name || 'Adarsh Kumar'}</b>
               <small>{data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : (session.user?.role || 'Owner')}</small>
             </span>
-            <button 
-              type="button" 
-              className="logout-btn" 
-              onClick={onLogout} 
+            <button
+              type="button"
+              className="logout-btn"
+              onClick={onLogout}
               title="Sign out"
-              style={{ 
-                marginLeft: 'auto', 
-                border: 0, 
-                background: 'transparent', 
-                padding: '6px', 
-                borderRadius: '6px', 
-                display: 'grid', 
-                placeItems: 'center', 
+              style={{
+                marginLeft: 'auto',
+                border: 0,
+                background: 'transparent',
+                padding: '6px',
+                borderRadius: '6px',
+                display: 'grid',
+                placeItems: 'center',
                 color: '#bc503d',
                 cursor: 'pointer',
                 transition: 'background 0.2s, color 0.2s'
@@ -274,6 +278,9 @@ export function Dashboard({ session, onLogout }) {
             <kbd>⌘ K</kbd>
           </div>
           <button className="icon-button"><Bell size={20} /><em /></button>
+
+          <ThemeToggle />
+
           <div className="header-avatar" title={session.user?.email || 'No email set'}>
             {session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}
           </div>
@@ -281,8 +288,8 @@ export function Dashboard({ session, onLogout }) {
 
         <section className="content">
           {active === 'My PG' ? (
-            <PropertySetup 
-              session={session} 
+            <PropertySetup
+              session={session}
               onDone={(newProp) => {
                 setProperties(prev => [...prev, newProp]);
                 setSelectedPropertyId(newProp._id);
@@ -291,16 +298,16 @@ export function Dashboard({ session, onLogout }) {
               }}
             />
           ) : active === 'Members' ? (
-            <MembersPage 
-              session={session} 
-              properties={properties} 
-              onRefresh={refreshDashboardData} 
+            <MembersPage
+              session={session}
+              properties={properties}
+              onRefresh={refreshDashboardData}
             />
           ) : active === 'Rooms & beds' ? (
-            <RoomsPage 
-              session={session} 
-              property={activeProperty} 
-              members={members} 
+            <RoomsPage
+              session={session}
+              property={activeProperty}
+              members={members}
               onUpdate={(updated) => {
                 setProperties(prev => prev.map(p => p._id === updated._id ? updated : p));
               }}
@@ -360,7 +367,7 @@ export function Dashboard({ session, onLogout }) {
                         <p>General rules & support</p>
                       </div>
                     </div>
-                    <div style={{ padding: '20px', fontSize: '13px', lineHeight: '1.6', color: '#53605c' }}>
+                    <div style={{ padding: '20px', fontSize: '13px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
                       <p style={{ margin: '0 0 10px' }}>🏡 <b>Support & Assistance:</b> If you face any issues or want to raise a maintenance query, please contact the manager.</p>
                       <p style={{ margin: '0 0 10px' }}>⚡ <b>Electricity Bills:</b> Meter reading is taken on the 1st of every month and bills are updated by the 5th.</p>
                       <p style={{ margin: '0' }}>⏰ <b>Gate Timings:</b> Main gate is closed from 11:00 PM to 6:00 AM daily.</p>

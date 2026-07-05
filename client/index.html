@@ -6,6 +6,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b3b32" />
   <title>StayZen — PG management</title>
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('stayzen-theme');
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {
+        console.error('Failed to init theme:', e);
+      }
+    })();
+  </script>
 </head>
 
 <body>
