@@ -25,6 +25,12 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const [updating, setUpdating] = useState(false);
   const [editError, setEditError] = useState('');
 
+  const [recordInitialPayment, setRecordInitialPayment] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+
   const triggerToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
@@ -73,6 +79,12 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     const roomId = prop?.rooms?.[0]?._id || '';
     const room = prop?.rooms?.find(r => r._id === roomId);
     const bedId = room?.beds?.find(b => b.status === 'vacant')?._id || '';
+
+    setRecordInitialPayment(false);
+    setPaymentAmount('');
+    setPaymentMethod('cash');
+    setPaymentRef('');
+    setPaymentNotes('');
 
     setForm({
       name: '',
@@ -159,7 +171,14 @@ export function MembersPage({ session, properties = [], onRefresh }) {
           Authorization: `Bearer ${session.accessToken}`,
           'x-organization-id': session.organizationId
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          recordInitialPayment,
+          paymentAmount: recordInitialPayment ? Number(paymentAmount) : undefined,
+          paymentMethod: recordInitialPayment ? paymentMethod : undefined,
+          paymentRef: recordInitialPayment ? paymentRef : undefined,
+          paymentNotes: recordInitialPayment ? paymentNotes : undefined
+        })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message);
@@ -475,6 +494,68 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                     }
                   </select>
                 </label>
+
+                <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', margin: '4px 0 0 0' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={recordInitialPayment} 
+                      onChange={e => {
+                        setRecordInitialPayment(e.target.checked);
+                        if (e.target.checked) {
+                          const prop = properties.find(p => p._id === form.propertyId);
+                          const room = prop?.rooms?.find(r => r._id === form.roomId);
+                          const bed = room?.beds?.find(b => b._id === form.bedId);
+                          if (bed) {
+                            setPaymentAmount(bed.monthlyRent.toString());
+                          }
+                        }
+                      }}
+                      style={{ width: '18px', height: '18px', margin: 0 }}
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: '600' }}>Record Initial Payment</span>
+                  </label>
+
+                  {recordInitialPayment && (
+                    <div style={{ display: 'grid', gap: '10px', padding: '12px', background: 'var(--app-bg)', border: '1px solid var(--border)', borderRadius: '8px', marginTop: '4px' }}>
+                      <div className="form-row">
+                        <label style={{ margin: 0 }}>Amount Received (₹)
+                          <input 
+                            type="number" 
+                            value={paymentAmount} 
+                            onChange={e => setPaymentAmount(e.target.value)} 
+                            placeholder="e.g. 12000" 
+                            required={recordInitialPayment} 
+                          />
+                        </label>
+                        <label style={{ margin: 0 }}>Method
+                          <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                            <option value="cash">Cash</option>
+                            <option value="upi">UPI</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="card">Card</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="form-row">
+                        <label style={{ margin: 0 }}>Receipt / Reference (Opt)
+                          <input 
+                            value={paymentRef} 
+                            onChange={e => setPaymentRef(e.target.value)} 
+                            placeholder="e.g. TX-1234" 
+                          />
+                        </label>
+                        <label style={{ margin: 0 }}>Notes (Opt)
+                          <input 
+                            value={paymentNotes} 
+                            onChange={e => setPaymentNotes(e.target.value)} 
+                            placeholder="Paid first month rent" 
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

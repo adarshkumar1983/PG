@@ -25,7 +25,15 @@ app.use('/api/admin', adminRoutes);
 
 if (process.env.MONGODB_URI) {
   mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('MongoDB connected'))
+    .then(() => {
+      console.log('MongoDB connected');
+      // Drop old unique payment index if it exists
+      mongoose.connection.db.collection('payments').dropIndex('organizationId_1_residentId_1_invoiceMonth_1')
+        .then(() => console.log('Old payment unique index dropped successfully.'))
+        .catch(() => {
+          // Index might not exist, which is fine
+        });
+    })
     .catch(error => console.error('MongoDB connection failed:', error.message));
 }
 

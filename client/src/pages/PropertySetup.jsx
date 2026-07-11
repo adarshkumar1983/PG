@@ -20,7 +20,13 @@ export function PropertySetup({ session, onDone }) {
     rooms: 10,
     defaultBeds: 2,
     defaultRent: 7500,
-    amenities: ['Wi-Fi', 'Power backup']
+    amenities: ['Wi-Fi', 'Power backup'],
+    maintenanceEnabled: false,
+    maintenanceAmount: 0,
+    maintenanceFrequency: 'monthly',
+    maintenanceCustomMonths: 1,
+    maintenanceNextDueDate: new Date().toISOString().slice(0, 10),
+    maintenanceSeparateInvoice: false
   });
   const [fetchingPincode, setFetchingPincode] = useState(false);
   const [citiesList, setCitiesList] = useState([]);
@@ -297,6 +303,83 @@ export function PropertySetup({ session, onDone }) {
                   <input type="number" min="0" value={form.defaultRent} onChange={e => update('defaultRent', e.target.value)} />
                 </label>
               </div>
+
+              <div style={{ marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px' }}>Recurring Maintenance Charge</h3>
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
+                  <input 
+                    type="checkbox" 
+                    id="maintenanceEnabled"
+                    checked={form.maintenanceEnabled} 
+                    onChange={e => update('maintenanceEnabled', e.target.checked)} 
+                    style={{ width: 'auto', marginRight: '6px' }}
+                  />
+                  <label htmlFor="maintenanceEnabled" style={{ margin: 0, fontWeight: '600', cursor: 'pointer' }}>
+                    Enable Recurring Maintenance Charges for this PG
+                  </label>
+                </div>
+
+                {form.maintenanceEnabled && (
+                  <div className="field-grid" style={{ marginTop: '12px' }}>
+                    <label>Maintenance Amount (₹) *
+                      <input 
+                        type="number" 
+                        min="0" 
+                        value={form.maintenanceAmount} 
+                        onChange={e => update('maintenanceAmount', Number(e.target.value))} 
+                        required 
+                      />
+                    </label>
+                    <label>Billing Frequency *
+                      <select 
+                        value={form.maintenanceFrequency} 
+                        onChange={e => update('maintenanceFrequency', e.target.value)}
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="2_months">Every 2 Months</option>
+                        <option value="3_months">Every 3 Months</option>
+                        <option value="4_months">Every 4 Months</option>
+                        <option value="6_months">Every 6 Months</option>
+                        <option value="yearly">Yearly</option>
+                        <option value="custom">Custom Interval (X Months)</option>
+                      </select>
+                    </label>
+
+                    {form.maintenanceFrequency === 'custom' && (
+                      <label>Custom Months *
+                        <input 
+                          type="number" 
+                          min="1" 
+                          value={form.maintenanceCustomMonths} 
+                          onChange={e => update('maintenanceCustomMonths', Number(e.target.value))} 
+                          required 
+                        />
+                      </label>
+                    )}
+
+                    <label>Next Due Date *
+                      <input 
+                        type="date" 
+                        value={form.maintenanceNextDueDate} 
+                        onChange={e => update('maintenanceNextDueDate', e.target.value)} 
+                        required 
+                      />
+                    </label>
+
+                    <label>Billing Mode *
+                      <select 
+                        value={form.maintenanceSeparateInvoice ? 'separate' : 'merged'} 
+                        onChange={e => update('maintenanceSeparateInvoice', e.target.value === 'separate')}
+                      >
+                        <option value="merged">Add to resident's monthly rent invoice</option>
+                        <option value="separate">Create separate maintenance invoice</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </div>
+
               <div className="inventory-preview">
                 <div>
                   <span><BedDouble /></span>

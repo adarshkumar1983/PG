@@ -38,8 +38,22 @@ router.route('/members/:id')
 
 router.post('/members/:id/resend-invite', authorize(permissions.STAFF_MANAGE), tenantController.resendInvite);
 
-router.get('/payments', authorize(permissions.PAYMENT_READ), tenantController.getPayments);
+router.route('/payments')
+  .get(authorize(permissions.PAYMENT_READ), tenantController.getPayments);
 
-router.post('/expenses', authorize(permissions.EXPENSE_WRITE), tenantController.createExpense);
+router.route('/payments/:id')
+  .put(authorize(permissions.PAYMENT_WRITE), tenantController.updatePayment)
+  .delete(authorize(permissions.PAYMENT_WRITE), tenantController.deletePayment);
+
+router.post('/payments/record-cash', authorize(permissions.PAYMENT_WRITE), tenantController.recordCashPayment);
+router.post('/invoices', authorize(permissions.PAYMENT_WRITE), tenantController.createInvoice);
+
+router.route('/expenses')
+  .get(authorize(permissions.EXPENSE_READ), tenantController.getExpenses)
+  .post(authorize(permissions.EXPENSE_WRITE), tenantController.createExpense);
+
+router.get('/audit-logs', authorize(permissions.REPORT_READ), tenantController.getAuditLogs);
+
+router.post('/maintenance-configs/trigger', authorize(permissions.PAYMENT_WRITE), tenantController.triggerScheduledMaintenanceInvoices);
 
 export default router;

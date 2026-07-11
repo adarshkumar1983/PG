@@ -96,3 +96,59 @@ export const createExpense = asyncHandler(async (req, res) => {
   const newExpense = await tenantService.createExpense(req.tenant, req.auth, req.body);
   res.status(201).json(newExpense);
 });
+
+/**
+ * GET / Get all expenses
+ */
+export const getExpenses = asyncHandler(async (req, res) => {
+  const expenses = await tenantService.getExpenses(req.tenant);
+  res.json(expenses);
+});
+
+/**
+ * POST / Create a due payment (invoice)
+ */
+export const createInvoice = asyncHandler(async (req, res) => {
+  const invoice = await tenantService.createInvoice(req.tenant, req.body);
+  res.status(201).json(invoice);
+});
+
+/**
+ * POST / Record cash payment
+ */
+export const recordCashPayment = asyncHandler(async (req, res) => {
+  const payment = await tenantService.recordCashPayment(req.tenant, req.auth, req.body);
+  res.status(201).json(payment);
+});
+
+/**
+ * PUT / Update payment
+ */
+export const updatePayment = asyncHandler(async (req, res) => {
+  const payment = await tenantService.updatePayment(req.tenant, req.auth, req.params.id, req.body);
+  res.json(payment);
+});
+
+/**
+ * DELETE / Delete payment
+ */
+export const deletePayment = asyncHandler(async (req, res) => {
+  const result = await tenantService.deletePayment(req.tenant, req.auth, req.params.id);
+  res.json(result);
+});
+
+/**
+ * GET / Get all audit logs
+ */
+export const getAuditLogs = asyncHandler(async (req, res) => {
+  const logs = await tenantService.getAuditLogs(req.tenant);
+  res.json(logs);
+});
+
+/**
+ * Maintenance Scheduler Trigger
+ */
+export const triggerScheduledMaintenanceInvoices = asyncHandler(async (req, res) => {
+  await tenantService.checkAndGeneratePropertyMaintenanceCharges(req.tenant);
+  res.json({ success: true, message: 'Maintenance invoice generation triggered successfully.' });
+});

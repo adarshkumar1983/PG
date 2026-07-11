@@ -9,6 +9,8 @@ import { dashboard } from '../seed.js';
 import { Organization } from '../models/Organization.js';
 import { sendInviteEmail } from '../utils/mailer.js';
 import * as mockStore from '../mockStore.js';
+import { AuditLog } from '../models/AuditLog.js';
+import { MaintenanceConfig } from '../models/MaintenanceConfig.js';
 
 export const isDbConnected = () => mongoose.connection.readyState === 1;
 
@@ -212,20 +214,12 @@ export async function getDashboard(tenant, auth) {
   const [
     residentsCount,
     properties,
-    paidPayments,
-    pendingPayments,
+    allPaymentsDb,
     recentPaymentsDb
   ] = await Promise.all([
     Resident.countDocuments({ ...filter, status: 'active' }),
     Property.find(filter).lean(),
-    Payment.aggregate([
-      { $match: { organizationId: orgId, status: 'paid' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]),
-    Payment.aggregate([
-      { $match: { organizationId: orgId, status: 'due' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]),
+    Payment.find(filter).lean(),
     Payment.find(filter)
       .populate('residentId', 'name')
       .sort({ createdAt: -1 })
@@ -239,8 +233,14 @@ export async function getDashboard(tenant, auth) {
   const vacantBeds = totalBeds - occupiedBeds;
   const roomsCount = properties.reduce((acc, p) => acc + p.rooms.length, 0);
 
-  const collected = paidPayments[0]?.total || 0;
-  const pending = pendingPayments[0]?.total || 0;
+  let collected = 0;
+  let pending = 0;
+  allPaymentsDb.forEach(p => {
+    collected += p.receivedAmount || 0;
+    if (['due', 'pending', 'partially_paid'].includes(p.status)) {
+      pending += Math.max(0, (p.amount || 0) - (p.receivedAmount || 0));
+    }
+  });
 
   const formattedPayments = recentPaymentsDb.map(p => {
     const resName = p.residentId?.name || 'Resident';
@@ -283,7 +283,55 @@ export async function getDashboard(tenant, auth) {
 
   const overduePaymentsCount = recentPaymentsDb.filter(p => p.status === 'due').length;
 
+  // Maintenance calculations
+  let todaysMaintenanceCollections = 0;
+  let pendingMaintenancePayments = 0;
+  let totalMaintenanceRevenue = 0;
+  
+  const todayStr = new Date().toDateString();
+  
+  allPaymentsDb.forEach(p => {
+    if (p.purpose === 'maintenance') {
+      totalMaintenanceRevenue += p.receivedAmount || 0;
+      
+      if (p.transactions) {
+        p.transactions.forEach(t => {
+          if (new Date(t.paidAt).toDateString() === todayStr) {
+            todaysMaintenanceCollections += t.amount || 0;
+          }
+        });
+      } else if (p.status === 'paid' && p.paidAt && new Date(p.paidAt).toDateString() === todayStr) {
+        todaysMaintenanceCollections += p.receivedAmount || 0;
+      }
+      
+      if (['due', 'pending', 'partially_paid'].includes(p.status)) {
+        pendingMaintenancePayments += Math.max(0, (p.amount || 0) - (p.receivedAmount || 0));
+      }
+    }
+  });
+
+  let nextMaintenanceDueDate = null;
+  let upcomingMaintenanceCharges = 0;
+
+  properties.forEach(prop => {
+    if (prop.maintenanceEnabled && prop.maintenanceNextDueDate) {
+      const dueDate = new Date(prop.maintenanceNextDueDate);
+      if (!nextMaintenanceDueDate || dueDate < nextMaintenanceDueDate) {
+        nextMaintenanceDueDate = dueDate;
+      }
+      const propResidentsCount = beds.filter(b => b.status === 'occupied').length;
+      upcomingMaintenanceCharges += propResidentsCount * (prop.maintenanceAmount || 0);
+    }
+  });
+
   return {
+    maintenanceStats: {
+      todaysMaintenanceCollections,
+      pendingMaintenancePayments,
+      totalMaintenanceRevenue,
+      nextMaintenanceDueDate,
+      upcomingMaintenanceCharges
+    },
     property: properties[0]?.name || 'My PG',
     owner: user?.name || 'Owner',
     month: currentMonthName,
@@ -468,8 +516,88 @@ export async function createMember(tenant, data) {
       checkInDate: new Date(),
       status: 'active'
     });
+    
+    let rentAmount = 8500;
     if (roomId && bedId) {
       await allocateBed(resident._id, propertyId, roomId, bedId);
+      
+      const propertyDoc = await Property.findById(propertyId);
+      if (propertyDoc) {
+        const roomDoc = propertyDoc.rooms.id(roomId);
+        if (roomDoc) {
+          const bedDoc = roomDoc.beds.id(bedId);
+          if (bedDoc) {
+            rentAmount = bedDoc.monthlyRent;
+          }
+        }
+      }
+    }
+
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+
+    // Auto raise first rent invoice for the resident
+    const paymentRecord = new Payment({
+      organizationId: tenant.organizationId,
+      propertyId,
+      residentId: resident._id,
+      invoiceMonth: currentMonthStr,
+      purpose: 'rent',
+      amount: rentAmount,
+      receivedAmount: 0,
+      status: 'due'
+    });
+
+    if (data.recordInitialPayment && data.paymentAmount > 0) {
+      const transactionDate = new Date();
+      paymentRecord.transactions.push({
+        amount: Number(data.paymentAmount),
+        paidAt: transactionDate,
+        method: data.paymentMethod || 'cash',
+        referenceNumber: data.paymentRef || '',
+        notes: data.paymentNotes || '',
+        recordedBy: user._id
+      });
+
+      paymentRecord.receivedAmount = Number(data.paymentAmount);
+      paymentRecord.paidAt = transactionDate;
+      paymentRecord.method = data.paymentMethod || 'cash';
+      paymentRecord.referenceNumber = data.paymentRef || '';
+      paymentRecord.notes = data.paymentNotes || '';
+      paymentRecord.recordedBy = user._id;
+
+      if (paymentRecord.receivedAmount >= paymentRecord.amount) {
+        paymentRecord.status = 'paid';
+      } else {
+        paymentRecord.status = 'partially_paid';
+      }
+
+      paymentRecord.history.push({
+        action: 'payment_recorded',
+        performedBy: user._id,
+        timestamp: transactionDate,
+        details: { amount: data.paymentAmount, method: data.paymentMethod || 'cash', referenceNumber: data.paymentRef }
+      });
+
+      await paymentRecord.save();
+
+      // Log to AuditLog
+      await AuditLog.create({
+        organizationId: tenant.organizationId,
+        performedBy: user._id,
+        action: 'record_payment',
+        entityType: 'Payment',
+        entityId: paymentRecord._id,
+        details: {
+          amount: data.paymentAmount,
+          purpose: 'rent',
+          invoiceMonth: currentMonthStr,
+          method: data.paymentMethod || 'cash',
+          residentName: resident.name,
+          newValue: { status: paymentRecord.status, receivedAmount: paymentRecord.receivedAmount }
+        }
+      });
+    } else {
+      await paymentRecord.save();
     }
   }
 
@@ -647,13 +775,421 @@ export async function resendInvite(tenant, id) {
  * GET payments
  */
 export async function getPayments(tenant) {
-  if (!isDbConnected()) return dashboard.payments;
-  return Payment.find({ organizationId: tenant.organizationId }).sort({ createdAt: -1 }).lean();
+  if (!isDbConnected()) return mockStore.getMockPayments(tenant.organizationId);
+  return Payment.find({ organizationId: tenant.organizationId })
+    .populate('residentId', 'name mobile email roomId bedId')
+    .populate('propertyId', 'name rooms')
+    .sort({ createdAt: -1 })
+    .lean();
 }
 
 /**
  * POST expenses
  */
 export async function createExpense(tenant, auth, data) {
-  return Expense.create({ ...data, organizationId: tenant.organizationId, recordedBy: auth.sub });
+  if (!isDbConnected()) {
+    return mockStore.createMockExpense(tenant.organizationId, auth.sub, data);
+  }
+  const user = await User.findById(auth.sub);
+  const recordedBy = user ? user._id : auth.sub;
+  return Expense.create({ ...data, organizationId: tenant.organizationId, recordedBy });
 }
+
+/**
+ * GET all expenses
+ */
+export async function getExpenses(tenant) {
+  if (!isDbConnected()) return mockStore.getMockExpenses(tenant.organizationId);
+  return Expense.find({ organizationId: tenant.organizationId })
+    .sort({ occurredAt: -1 })
+    .lean();
+}
+
+/**
+ * POST / Create a due payment (invoice)
+ */
+export async function createInvoice(tenant, data) {
+  const { propertyId, residentId, invoiceMonth, purpose, amount } = data;
+  if (!propertyId || !residentId || !invoiceMonth || !purpose || amount === undefined) {
+    const err = new Error('Property, Resident, Month, Purpose and Amount are required.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!isDbConnected()) {
+    return mockStore.createMockInvoice(tenant.organizationId, data);
+  }
+
+  const existing = await Payment.findOne({
+    organizationId: tenant.organizationId,
+    residentId,
+    invoiceMonth,
+    purpose: purpose.toLowerCase()
+  });
+
+  if (existing) {
+    const err = new Error(`An invoice for ${purpose} in ${invoiceMonth} already exists for this resident.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const invoice = await Payment.create({
+    organizationId: tenant.organizationId,
+    propertyId,
+    residentId,
+    invoiceMonth,
+    purpose: purpose.toLowerCase(),
+    amount,
+    status: 'due',
+    receivedAmount: 0
+  });
+
+  return invoice;
+}
+
+/**
+ * POST / Record cash payment
+ */
+export async function recordCashPayment(tenant, auth, data) {
+  const { propertyId, residentId, invoiceMonth, purpose, amount, paidAt, referenceNumber, notes, paymentId } = data;
+  if (!residentId || !invoiceMonth || !purpose || amount === undefined || amount <= 0) {
+    const err = new Error('Resident, Month, Purpose, and positive Amount are required.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!isDbConnected()) {
+    return mockStore.recordMockCashPayment(tenant.organizationId, auth.sub, data);
+  }
+
+  const resident = await Resident.findById(residentId);
+  if (!resident) {
+    const err = new Error('Resident not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  let paymentRecord;
+  if (paymentId) {
+    paymentRecord = await Payment.findOne({ _id: paymentId, organizationId: tenant.organizationId });
+  } else {
+    paymentRecord = await Payment.findOne({
+      organizationId: tenant.organizationId,
+      residentId,
+      invoiceMonth,
+      purpose: purpose.toLowerCase()
+    });
+  }
+
+  const user = await User.findById(auth.sub);
+  const recordedBy = user ? user._id : auth.sub;
+
+  if (!paymentRecord) {
+    paymentRecord = new Payment({
+      organizationId: tenant.organizationId,
+      propertyId: propertyId || resident.propertyId,
+      residentId,
+      invoiceMonth,
+      purpose: purpose.toLowerCase(),
+      amount: amount,
+      receivedAmount: 0,
+      status: 'due'
+    });
+  }
+
+  const remainingDue = paymentRecord.amount - paymentRecord.receivedAmount;
+  if (amount > remainingDue && !data.allowOverpayment) {
+    const err = new Error(`Payment of ₹${amount} exceeds outstanding balance of ₹${remainingDue}.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const transactionDate = paidAt ? new Date(paidAt) : new Date();
+  
+  paymentRecord.transactions.push({
+    amount,
+    paidAt: transactionDate,
+    method: 'cash',
+    referenceNumber,
+    notes,
+    recordedBy
+  });
+
+  paymentRecord.receivedAmount += amount;
+  paymentRecord.paidAt = transactionDate;
+  paymentRecord.method = 'cash';
+  paymentRecord.referenceNumber = referenceNumber;
+  paymentRecord.notes = notes;
+  paymentRecord.recordedBy = recordedBy;
+
+  if (paymentRecord.receivedAmount >= paymentRecord.amount) {
+    paymentRecord.status = 'paid';
+  } else if (paymentRecord.receivedAmount > 0) {
+    paymentRecord.status = 'partially_paid';
+  } else {
+    paymentRecord.status = 'due';
+  }
+
+  paymentRecord.history.push({
+    action: 'payment_recorded',
+    performedBy: recordedBy,
+    timestamp: new Date(),
+    details: { amount, method: 'cash', referenceNumber }
+  });
+
+  await paymentRecord.save();
+
+  await AuditLog.create({
+    organizationId: tenant.organizationId,
+    performedBy: recordedBy,
+    action: 'record_payment',
+    entityType: 'Payment',
+    entityId: paymentRecord._id,
+    details: {
+      amount,
+      purpose: purpose.toLowerCase(),
+      invoiceMonth,
+      method: 'cash',
+      residentName: resident.name,
+      newValue: { status: paymentRecord.status, receivedAmount: paymentRecord.receivedAmount }
+    }
+  });
+
+  return paymentRecord;
+}
+
+/**
+ * PUT / Update payment
+ */
+export async function updatePayment(tenant, auth, id, data) {
+  if (!isDbConnected()) {
+    return mockStore.updateMockPayment(tenant.organizationId, auth.sub, id, data);
+  }
+
+  const payment = await Payment.findOne({ _id: id, organizationId: tenant.organizationId });
+  if (!payment) {
+    const err = new Error('Payment not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  if (payment.method !== 'cash' && payment.gatewayPaymentId) {
+    const err = new Error('Online payments cannot be edited.');
+    err.status = 400;
+    throw err;
+  }
+
+  const user = await User.findById(auth.sub);
+  const performedBy = user ? user._id : auth.sub;
+
+  const oldValue = {
+    amount: payment.amount,
+    receivedAmount: payment.receivedAmount,
+    status: payment.status,
+    invoiceMonth: payment.invoiceMonth,
+    purpose: payment.purpose,
+    notes: payment.notes,
+    referenceNumber: payment.referenceNumber
+  };
+
+  if (data.amount !== undefined) payment.amount = Number(data.amount);
+  if (data.receivedAmount !== undefined) payment.receivedAmount = Number(data.receivedAmount);
+  if (data.invoiceMonth !== undefined) payment.invoiceMonth = data.invoiceMonth;
+  if (data.purpose !== undefined) payment.purpose = data.purpose.toLowerCase();
+  if (data.notes !== undefined) payment.notes = data.notes;
+  if (data.referenceNumber !== undefined) payment.referenceNumber = data.referenceNumber;
+  if (data.status !== undefined) payment.status = data.status;
+
+  if (data.status === undefined) {
+    if (payment.receivedAmount >= payment.amount) {
+      payment.status = 'paid';
+    } else if (payment.receivedAmount > 0) {
+      payment.status = 'partially_paid';
+    } else {
+      payment.status = 'due';
+    }
+  }
+
+  payment.history.push({
+    action: 'edit',
+    performedBy,
+    timestamp: new Date(),
+    details: { oldValue, newValue: data }
+  });
+
+  await payment.save();
+
+  const resident = await Resident.findById(payment.residentId).lean();
+  await AuditLog.create({
+    organizationId: tenant.organizationId,
+    performedBy,
+    action: 'edit',
+    entityType: 'Payment',
+    entityId: payment._id,
+    details: {
+      purpose: payment.purpose,
+      invoiceMonth: payment.invoiceMonth,
+      residentName: resident?.name || 'Resident',
+      oldValue,
+      newValue: data
+    }
+  });
+
+  return payment;
+}
+
+/**
+ * DELETE / Delete payment
+ */
+export async function deletePayment(tenant, auth, id) {
+  if (!isDbConnected()) {
+    return mockStore.deleteMockPayment(tenant.organizationId, auth.sub, id);
+  }
+
+  const payment = await Payment.findOne({ _id: id, organizationId: tenant.organizationId });
+  if (!payment) {
+    const err = new Error('Payment not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  if (payment.method !== 'cash' && payment.gatewayPaymentId) {
+    const err = new Error('Online payments cannot be deleted.');
+    err.status = 400;
+    throw err;
+  }
+
+  const user = await User.findById(auth.sub);
+  const performedBy = user ? user._id : auth.sub;
+  const resident = await Resident.findById(payment.residentId).lean();
+
+  await AuditLog.create({
+    organizationId: tenant.organizationId,
+    performedBy,
+    action: 'delete',
+    entityType: 'Payment',
+    entityId: payment._id,
+    details: {
+      amount: payment.amount,
+      purpose: payment.purpose,
+      invoiceMonth: payment.invoiceMonth,
+      residentName: resident?.name || 'Resident',
+      oldValue: {
+        amount: payment.amount,
+        receivedAmount: payment.receivedAmount,
+        status: payment.status
+      }
+    }
+  });
+
+  await Payment.deleteOne({ _id: id, organizationId: tenant.organizationId });
+  return { success: true };
+}
+
+/**
+ * GET audit logs
+ */
+export async function getAuditLogs(tenant) {
+  if (!isDbConnected()) {
+    return mockStore.getMockAuditLogs(tenant.organizationId);
+  }
+  return AuditLog.find({ organizationId: tenant.organizationId })
+    .populate('performedBy', 'name email mobile')
+    .sort({ createdAt: -1 })
+    .lean();
+}
+
+/**
+ * Refined Property-Level Maintenance Billing and Scheduling
+ */
+export function calculateNextDueDate(currentDueDate, frequency, customMonths = 1) {
+  const date = new Date(currentDueDate);
+  let monthsToAdd = 1;
+  switch (frequency) {
+    case 'monthly': monthsToAdd = 1; break;
+    case '2_months': monthsToAdd = 2; break;
+    case '3_months': monthsToAdd = 3; break;
+    case '4_months': monthsToAdd = 4; break;
+    case '6_months': monthsToAdd = 6; break;
+    case 'yearly': monthsToAdd = 12; break;
+    case 'custom': monthsToAdd = customMonths || 1; break;
+  }
+  date.setMonth(date.getMonth() + monthsToAdd);
+  return date;
+}
+
+export async function checkAndGeneratePropertyMaintenanceCharges(tenant) {
+  if (!isDbConnected()) {
+    return mockStore.checkAndGenerateMockPropertyMaintenanceCharges(tenant.organizationId);
+  }
+
+  const today = new Date();
+  
+  // Find properties in the organization with maintenanceEnabled and nextDueDate <= today
+  const properties = await Property.find({
+    organizationId: tenant.organizationId,
+    maintenanceEnabled: true,
+    maintenanceNextDueDate: { $lte: today }
+  });
+
+  for (const property of properties) {
+    const nextDueDate = property.maintenanceNextDueDate;
+    const invoiceMonth = nextDueDate.toISOString().slice(0, 7);
+
+    // Find all active residents
+    const residents = await Resident.find({
+      organizationId: tenant.organizationId,
+      propertyId: property._id,
+      status: 'active'
+    });
+
+    for (const resident of residents) {
+      // Check duplicate
+      const existing = await Payment.findOne({
+        organizationId: tenant.organizationId,
+        residentId: resident._id,
+        invoiceMonth,
+        purpose: 'maintenance',
+        notes: `Maintenance charge for ${property.name}`
+      });
+
+      if (!existing) {
+        const newPayment = await Payment.create({
+          organizationId: tenant.organizationId,
+          propertyId: property._id,
+          residentId: resident._id,
+          invoiceMonth,
+          purpose: 'maintenance',
+          amount: property.maintenanceAmount,
+          receivedAmount: 0,
+          status: 'due',
+          notes: `Maintenance charge for ${property.name}`
+        });
+
+        // AuditLog
+        await AuditLog.create({
+          organizationId: tenant.organizationId,
+          performedBy: tenant.organizationId,
+          action: 'create',
+          entityType: 'Payment',
+          entityId: newPayment._id,
+          details: {
+            amount: property.maintenanceAmount,
+            purpose: 'maintenance',
+            invoiceMonth,
+            residentName: resident.name
+          }
+        });
+      }
+    }
+
+    // Advance next due date
+    property.maintenanceNextDueDate = calculateNextDueDate(
+      nextDueDate,
+      property.maintenanceFrequency,
+      property.maintenanceCustomMonths
+    );
+    await property.save();
+  }
+}
+

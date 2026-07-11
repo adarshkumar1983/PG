@@ -3,7 +3,7 @@ import {
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
   IndianRupee, FileText, HelpCircle, LayoutDashboard, LogOut, Menu,
   MoreHorizontal, Plus, Search, Settings, ShieldCheck, Users, WalletCards, X,
-  Sun, Moon, Monitor
+  Sun, Moon, Monitor, Wrench
 } from 'lucide-react';
 import { money } from '../utils/formatters.js';
 import { fallback } from '../constants/fallbackData.js';
@@ -12,10 +12,15 @@ import RoomsPage from './RoomsPage.jsx';
 import MembersPage from './MembersPage.jsx';
 import PropertySetup from './PropertySetup.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import ResidentsPage from './ResidentsPage.jsx';
+import PaymentsPage from './PaymentsPage.jsx';
+import ExpensesPage from './ExpensesPage.jsx';
+import ReportsPage from './ReportsPage.jsx';
+import MaintenancePage from './MaintenancePage.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
-  ['Payments', WalletCards], ['Expenses', IndianRupee], ['Reports', FileText]
+  ['Payments', WalletCards], ['Expenses', IndianRupee], ['Maintenance', Wrench], ['Reports', FileText]
 ];
 
 const emptyData = {
@@ -216,9 +221,6 @@ export function Dashboard({ session, onLogout }) {
               onClick={() => {
                 setActive(label);
                 setMenuOpen(false);
-                if (!['Overview', 'My PG', 'Members', 'Rooms & beds'].includes(label)) {
-                  notify(`${label} module is next in the MVP`);
-                }
               }}
             >
               <Icon size={19} />
@@ -312,6 +314,39 @@ export function Dashboard({ session, onLogout }) {
                 setProperties(prev => prev.map(p => p._id === updated._id ? updated : p));
               }}
             />
+          ) : active === 'Residents' ? (
+            <ResidentsPage
+              session={session}
+              properties={properties}
+              members={members}
+              onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Payments' ? (
+            <PaymentsPage
+              session={session}
+              properties={properties}
+              members={members}
+              onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Expenses' ? (
+            <ExpensesPage
+              session={session}
+              properties={properties}
+              onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Maintenance' ? (
+            <MaintenancePage
+              session={session}
+              properties={properties}
+              members={members}
+              onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Reports' ? (
+            <ReportsPage
+              session={session}
+              properties={properties}
+              onRefresh={refreshDashboardData}
+            />
           ) : (
             <>
               <div className="welcome">
@@ -331,12 +366,41 @@ export function Dashboard({ session, onLogout }) {
                   <Metric icon={<CalendarDays />} label="Pending Dues" value={money(data.stats.pending)} note={data.stats.pending > 0 ? "Please pay soon" : "All dues cleared"} danger={data.stats.pending > 0} positive={data.stats.pending === 0} />
                 </div>
               ) : (
-                <div className="metrics">
-                  <Metric icon={<Users />} label="Total residents" value={activeProperty ? activeProperty.rooms.reduce((acc, r) => acc + r.beds.filter(b => b.status === 'occupied').length, 0) : data.stats.residents} note="Dynamic live count" positive />
-                  <Metric icon={<BedDouble />} label="Occupancy" value={`${occupancy}%`} note={`${vacantBeds} beds available`} />
-                  <Metric icon={<IndianRupee />} label="Rent collected" value={money(data.stats.collected)} note={`${collectionPercent}% of this month`} positive />
-                  <Metric icon={<CalendarDays />} label="Pending dues" value={money(data.stats.pending)} note="11 residents overdue" danger />
-                </div>
+                <>
+                  <div className="metrics">
+                    <Metric icon={<Users />} label="Total residents" value={activeProperty ? activeProperty.rooms.reduce((acc, r) => acc + r.beds.filter(b => b.status === 'occupied').length, 0) : data.stats.residents} note="Dynamic live count" positive />
+                    <Metric icon={<BedDouble />} label="Occupancy" value={`${occupancy}%`} note={`${vacantBeds} beds available`} />
+                    <Metric icon={<IndianRupee />} label="Rent collected" value={money(data.stats.collected)} note={`${collectionPercent}% of this month`} positive />
+                    <Metric icon={<CalendarDays />} label="Pending dues" value={money(data.stats.pending)} note="11 residents overdue" danger />
+                  </div>
+
+                  {data.maintenanceStats && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px', margin: '16px 0 24px 0' }}>
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Upcoming Maint.</span>
+                        <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', fontWeight: '800' }}>{money(data.maintenanceStats.upcomingMaintenanceCharges)}</strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Today's Coll.</span>
+                        <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', color: 'var(--green)', fontWeight: '800' }}>{money(data.maintenanceStats.todaysMaintenanceCollections)}</strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Pending Maint.</span>
+                        <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', color: 'var(--color-danger)', fontWeight: '800' }}>{money(data.maintenanceStats.pendingMaintenancePayments)}</strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Next Due Date</span>
+                        <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', color: 'var(--color-warning)', fontWeight: '800' }}>
+                          {data.maintenanceStats.nextMaintenanceDueDate ? new Date(data.maintenanceStats.nextMaintenanceDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'N/A'}
+                        </strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Total Revenue</span>
+                        <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', color: 'var(--green)', fontWeight: '800' }}>{money(data.maintenanceStats.totalMaintenanceRevenue)}</strong>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {data.role === 'resident' ? (

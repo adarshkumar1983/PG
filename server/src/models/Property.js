@@ -17,7 +17,15 @@ const roomSchema = new mongoose.Schema({
 const propertySchema = new mongoose.Schema({
   organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   name: { type: String, required: true }, address: String, contactNumber: String,
-  gstNumber: String, amenities: [String], photos: [String], rooms: { type: [roomSchema], default: [] }
+  gstNumber: String, amenities: [String], photos: [String], rooms: { type: [roomSchema], default: [] },
+  
+  // Maintenance Settings
+  maintenanceEnabled: { type: Boolean, default: false },
+  maintenanceAmount: { type: Number, default: 0 },
+  maintenanceFrequency: { type: String, enum: ['monthly', '2_months', '3_months', '4_months', '6_months', 'yearly', 'custom'], default: 'monthly' },
+  maintenanceCustomMonths: { type: Number, default: 1 },
+  maintenanceNextDueDate: { type: Date },
+  maintenanceSeparateInvoice: { type: Boolean, default: false }
 }, { timestamps: true });
 
 propertySchema.index({ organizationId: 1, name: 1 });
