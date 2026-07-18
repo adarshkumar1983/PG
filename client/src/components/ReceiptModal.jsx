@@ -205,7 +205,7 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
             </div>
 
             {/* Metadata Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px', fontSize: '13px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px', fontSize: '13px' }}>
               <div>
                 <h4 style={{ margin: '0 0 4px 0', fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>Issued To</h4>
                 <p style={{ margin: 0, fontWeight: '700' }}>{residentName}</p>

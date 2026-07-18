@@ -348,7 +348,7 @@ export default function MaintenancePage({ session, properties = [], members = []
       </section>
 
       {/* Grid Layout: Configured Properties & Ledger */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }} className="reports-grid">
+      <div className="maintenance-grid">
         
         {/* Configured PG Settings list */}
         <section className="card" style={{ padding: '24px', height: 'fit-content' }}>
@@ -399,8 +399,8 @@ export default function MaintenancePage({ session, properties = [], members = []
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Maintenance Payments Ledger</h2>
             
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div className="search" style={{ width: '220px', height: '36px', padding: '0 10px', background: 'var(--app-bg)', border: '1px solid var(--border)' }}>
+            <div className="maintenance-toolbar">
+              <div className="search" style={{ height: '42px', padding: '0 12px', background: 'var(--app-bg)', border: '1px solid var(--border)', borderRadius: '10px' }}>
                 <Search size={15} />
                 <input 
                   placeholder="Search ledger..." 
@@ -413,7 +413,7 @@ export default function MaintenancePage({ session, properties = [], members = []
               <select 
                 value={statusFilter} 
                 onChange={e => setStatusFilter(e.target.value)}
-                style={{ padding: '0 10px', height: '36px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '12px', background: 'var(--card-bg)' }}
+                style={{ padding: '0 14px', height: '42px', borderRadius: '10px', border: '1px solid var(--border)', fontSize: '12px', background: 'var(--card-bg)' }}
               >
                 <option value="all">All Statuses</option>
                 <option value="due">Pending</option>

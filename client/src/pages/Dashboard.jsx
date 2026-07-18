@@ -402,7 +402,7 @@ export function Dashboard({ session, onLogout }) {
                   </div>
 
                   {data.maintenanceStats && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px', margin: '16px 0 24px 0' }}>
+                    <div className="maintenance-stats-grid">
                       <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
                         <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', textTransform: 'uppercase', fontWeight: '800' }}>Upcoming Maint.</span>
                         <strong style={{ fontSize: '15px', display: 'block', marginTop: '4px', fontWeight: '800' }}>{money(data.maintenanceStats.upcomingMaintenanceCharges)}</strong>

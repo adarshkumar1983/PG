@@ -9,12 +9,12 @@ export default function PaymentsPage({ session, properties = [], members = [], u
   const [residents, setResidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Filters
   const [methodFilter, setMethodFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [purposeFilter, setPurposeFilter] = useState('all');
-  
+
   // Modals state
   const [recordModal, setRecordModal] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState(null);
@@ -139,11 +139,11 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     return payments.filter(p => {
       const resName = p.residentId?.name || p.name || 'Resident';
       const refNum = p.referenceNumber || '';
-      
-      const matchSearch = resName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.invoiceMonth.includes(searchQuery) ||
-                          refNum.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
+      const matchSearch = resName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.invoiceMonth.includes(searchQuery) ||
+        refNum.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchMethod = methodFilter === 'all' ? true : p.method === methodFilter;
       const matchStatus = statusFilter === 'all' ? true : p.status === statusFilter;
       const matchPurpose = purposeFilter === 'all' ? true : p.purpose === purposeFilter;
@@ -279,20 +279,19 @@ export default function PaymentsPage({ session, properties = [], members = [], u
       </div>
 
       {/* Filters and Search Bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '24px', alignItems: 'center' }}>
-        <div className="search" style={{ flex: 1, minWidth: '240px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+      <div className="payments-filters-row">
+        <div className="search">
           <Search size={18} />
-          <input 
-            placeholder="Search by resident name, month, receipt number..." 
+          <input
+            placeholder="Search by resident name, month, receipt number..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
 
-        <select 
-          value={methodFilter} 
+        <select
+          value={methodFilter}
           onChange={e => setMethodFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Methods</option>
           <option value="cash">Cash Payments</option>
@@ -302,10 +301,9 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <option value="online_gateway">Online Gateway</option>
         </select>
 
-        <select 
-          value={statusFilter} 
+        <select
+          value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Statuses</option>
           <option value="paid">Paid</option>
@@ -314,10 +312,9 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <option value="pending">Pending</option>
         </select>
 
-        <select 
-          value={purposeFilter} 
+        <select
+          value={purposeFilter}
           onChange={e => setPurposeFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Purposes</option>
           <option value="rent">Rent</option>
@@ -333,7 +330,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
       {/* Ledger Table */}
       <section className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <div style={{ minWidth: '800px' }}>
-          <div className="tr table-head" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px', background: 'var(--table-head-bg)' }}>
+          <div className="tr table-head" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px', background: 'var(--table-head-bg)', display: 'flex', alignItems: 'center' }}>
             <span style={{ flex: 1.5 }}>Resident</span>
             <span style={{ flex: 1 }}>Purpose & Month</span>
             <span style={{ flex: 1, textAlign: 'right' }}>Total Invoice</span>
@@ -346,7 +343,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           {filteredPayments.map(p => {
             const resName = p.residentId?.name || p.name || 'Resident';
             const initials = resName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
-            
+
             // Map status classes
             let statusClass = p.status.toLowerCase().replace('_', '-');
             let statusLabel = p.status.replace('_', ' ');
@@ -358,13 +355,13 @@ export default function PaymentsPage({ session, properties = [], members = [], u
             const isCash = p.method === 'cash' || (!p.method && p.status === 'paid');
 
             return (
-              <div 
-                className="tr" 
-                key={p._id} 
-                style={{ 
-                  padding: '14px 20px', 
-                  borderBottom: '1px solid var(--border)', 
-                  display: 'flex', 
+              <div
+                className="tr"
+                key={p._id}
+                style={{
+                  padding: '14px 20px',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
                   alignItems: 'center',
                   transition: 'background 0.2s'
                 }}
@@ -399,20 +396,22 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                 {/* Payment Method Badge */}
                 <span style={{ flex: 1.2, textAlign: 'center' }}>
                   {p.method ? (
-                    <span 
+                    <span
                       className={`badge method-${p.method}`}
-                      style={{ 
-                        fontSize: '11px', 
-                        padding: '3px 8px', 
+                      style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
                         borderRadius: '6px',
                         textTransform: 'uppercase',
                         fontWeight: '700',
                         backgroundColor: p.method === 'cash' ? '#fde8e4' : '#e6efe9',
                         color: p.method === 'cash' ? '#b45309' : 'var(--green)',
-                        border: p.method === 'cash' ? '1px solid #fed7aa' : '1px solid #c2ffd4'
+                        border: p.method === 'cash' ? '1px solid #fed7aa' : '1px solid #c2ffd4',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block'
                       }}
                     >
-                      {p.method.replace('_', ' ')}
+                      {p.method === 'online_gateway' ? 'online' : p.method.replace('_', ' ')}
                     </span>
                   ) : (
                     <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Unspecified</span>
@@ -421,7 +420,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
                 {/* Status Pill */}
                 <span style={{ flex: 1.2, textAlign: 'center' }}>
-                  <span className={`pill ${statusClass}`} style={{ fontSize: '11px', padding: '3px 8px', textTransform: 'capitalize' }}>
+                  <span className={`pill ${statusClass}`} style={{ fontSize: '11px', padding: '3px 8px', textTransform: 'capitalize', whiteSpace: 'nowrap', display: 'inline-block' }}>
                     {statusLabel}
                   </span>
                 </span>
@@ -448,8 +447,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                     </button>
                   )}
 
-                  <button 
-                    title="View & Print Receipt" 
+                  <button
+                    title="View & Print Receipt"
                     onClick={() => setReceiptPayment(p)}
                     style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'var(--text-primary)' }}
                   >
@@ -458,15 +457,15 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
                   {isCash && userRole !== 'resident' && (
                     <>
-                      <button 
-                        title="Edit Cash Payment" 
+                      <button
+                        title="Edit Cash Payment"
                         onClick={() => handleEditClick(p)}
                         style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'var(--green)' }}
                       >
                         <Edit2 size={14} />
                       </button>
-                      <button 
-                        title="Delete Payment" 
+                      <button
+                        title="Delete Payment"
                         onClick={() => setDeletePaymentId(p._id)}
                         style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'red' }}
                       >
@@ -504,7 +503,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
       {/* Receipt Modal */}
       {receiptPayment && (
-        <ReceiptModal 
+        <ReceiptModal
           payment={receiptPayment}
           onClose={() => setReceiptPayment(null)}
           pgName={properties[0]?.name || "StayZen Residency"}
@@ -536,7 +535,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                     required
                   />
                 </label>
-                
+
                 <label>Received Amount (₹)
                   <input
                     type="number"
@@ -558,8 +557,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                 </label>
 
                 <label>Purpose
-                  <select 
-                    value={editForm.purpose} 
+                  <select
+                    value={editForm.purpose}
                     onChange={e => setEditForm(prev => ({ ...prev, purpose: e.target.value }))}
                     required
                   >
@@ -583,8 +582,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                 </label>
 
                 <label>Ledger Status
-                  <select 
-                    value={editForm.status} 
+                  <select
+                    value={editForm.status}
                     onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
                     required
                   >
@@ -635,9 +634,9 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
             <div className="modal-actions">
               <button className="secondary" onClick={() => setDeletePaymentId(null)} disabled={actionSaving}>Cancel</button>
-              <button 
-                className="primary" 
-                onClick={handleDeleteSubmit} 
+              <button
+                className="primary"
+                onClick={handleDeleteSubmit}
                 disabled={actionSaving}
                 style={{ backgroundColor: 'var(--color-danger)' }}
               >

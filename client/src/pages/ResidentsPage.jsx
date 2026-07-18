@@ -176,8 +176,8 @@ export default function ResidentsPage({ session, properties = [], members = [], 
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '24px', alignItems: 'center' }}>
-        <div className="search" style={{ flex: 1, minWidth: '240px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+      <div className="payments-filters-row">
+        <div className="search">
           <Search size={18} />
           <input 
             placeholder="Search residents by name, phone or email..." 
@@ -189,7 +189,6 @@ export default function ResidentsPage({ session, properties = [], members = [], 
         <select 
           value={statusFilter} 
           onChange={e => setStatusFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Residency States</option>
           <option value="active">Active Residents</option>
@@ -201,7 +200,6 @@ export default function ResidentsPage({ session, properties = [], members = [], 
         <select 
           value={paymentFilter} 
           onChange={e => setPaymentFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Payment States</option>
           <option value="due">With Outstanding Dues</option>
@@ -341,7 +339,7 @@ export default function ResidentsPage({ session, properties = [], members = [], 
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               {/* Room Rent details */}
-              <div className="card" style={{ padding: '16px', background: 'var(--app-bg)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="card drawer-grid" style={{ padding: '16px', background: 'var(--app-bg)' }}>
                 <div>
                   <small style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>PG & Room assignment</small>
                   <p style={{ margin: '4px 0 0 0', fontWeight: '700', fontSize: '14px' }}>

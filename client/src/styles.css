@@ -266,14 +266,21 @@ header {
 .search {
   margin-right: auto;
   width: min(420px, 45vw);
-  height: 38px;
-  background: #f5f7f5;
+  height: 42px;
+  background: var(--input-bg, #f5f7f5);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  padding: 0 11px;
-  color: #84908c
+  padding: 0 14px;
+  color: #84908c;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(11, 68, 56, 0.12);
+  background: var(--card-bg, #fff);
 }
 
 .search input {
@@ -281,8 +288,14 @@ header {
   outline: 0;
   background: transparent;
   flex: 1;
-  padding: 0 9px;
-  font-size: 13px
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.search input::placeholder {
+  color: #84908c;
+  opacity: 0.85;
 }
 
 .search kbd {
@@ -1266,7 +1279,8 @@ header {
 .setup-heading {
   display: flex;
   justify-content: space-between;
-  align-items: start
+  align-items: start;
+  margin-bottom: 28px;
 }
 
 .setup-heading h1 {
@@ -2812,4 +2826,169 @@ header {
 
 .logout-btn:active {
   transform: scale(0.93);
+}
+
+/* Responsive UI Utility Classes */
+.maintenance-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin: 16px 0 24px 0;
+}
+
+@media (max-width: 1024px) {
+  .maintenance-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .maintenance-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 440px) {
+  .maintenance-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.maintenance-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
+@media (max-width: 920px) {
+  .maintenance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 920px) {
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 550px) {
+  .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.payments-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+.payments-filters-row .search {
+  flex: 1;
+  min-width: 240px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+.payments-filters-row select {
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  height: 42px;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.payments-filters-row select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(11, 68, 56, 0.12);
+}
+
+@media (max-width: 600px) {
+  .payments-filters-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .payments-filters-row .search {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .payments-filters-row select {
+    width: 100%;
+  }
+}
+
+.maintenance-toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 500px) {
+  .maintenance-toolbar {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .maintenance-toolbar .search {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 500px) {
+  .bed-edit-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+
+  .bed-edit-row input,
+  .bed-edit-row select {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .member-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .member-toolbar .search {
+    width: 100% !important;
+  }
+
+  .member-toolbar .filter-dropdown-container {
+    width: 100%;
+  }
+
+  .member-toolbar .filter-dropdown-container button {
+    width: 100%;
+    justify-content: space-between;
+  }
 }

@@ -222,7 +222,7 @@ export default function ReportsPage({ session, properties = [] }) {
         </article>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', marginBottom: '32px' }} className="reports-grid">
+      <div className="reports-grid">
         
         {/* Breakdown Charts */}
         <section className="card" style={{ padding: '24px' }}>
@@ -468,7 +468,7 @@ export default function ReportsPage({ session, properties = [] }) {
                       {new Date(log.createdAt).toLocaleString('en-IN')}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <span className="pill" style={{ fontSize: '10px', padding: '2px 6px', textTransform: 'uppercase', ...actionBadgeStyle }}>
+                      <span className="pill" style={{ fontSize: '10px', padding: '2px 6px', textTransform: 'uppercase', display: 'inline-block', whiteSpace: 'nowrap', ...actionBadgeStyle }}>
                         {log.action.replace('_', ' ')}
                       </span>
                     </td>

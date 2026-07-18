@@ -146,8 +146,8 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
       </div>
 
       {/* Search and Filters */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '24px', alignItems: 'center' }}>
-        <div className="search" style={{ flex: 1, minWidth: '240px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+      <div className="payments-filters-row">
+        <div className="search">
           <Search size={18} />
           <input 
             placeholder="Search expenses by category or note..." 
@@ -159,7 +159,6 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
         <select 
           value={categoryFilter} 
           onChange={e => setCategoryFilter(e.target.value)}
-          style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         >
           <option value="all">All Categories</option>
           <option value="electricity">Electricity</option>
@@ -173,7 +172,7 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
       {/* Expense ledger ledger list */}
       <section className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <div style={{ minWidth: '700px' }}>
-          <div className="tr table-head" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px', background: 'var(--table-head-bg)' }}>
+          <div className="tr table-head" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px', background: 'var(--table-head-bg)', display: 'flex', alignItems: 'center' }}>
             <span style={{ flex: 1.5 }}>Category</span>
             <span style={{ flex: 2 }}>Notes / Detail</span>
             <span style={{ flex: 1, textAlign: 'right' }}>Amount</span>
