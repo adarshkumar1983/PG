@@ -4,7 +4,7 @@ import RecordPaymentModal from '../components/RecordPaymentModal.jsx';
 import ReceiptModal from '../components/ReceiptModal.jsx';
 import { money } from '../utils/formatters.js';
 
-export default function PaymentsPage({ session, properties = [], members = [], onRefresh }) {
+export default function PaymentsPage({ session, properties = [], members = [], userRole, onRefresh }) {
   const [payments, setPayments] = useState([]);
   const [residents, setResidents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +21,31 @@ export default function PaymentsPage({ session, properties = [], members = [], o
   const [editPayment, setEditPayment] = useState(null);
   const [deletePaymentId, setDeletePaymentId] = useState(null);
   const [toast, setToast] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentStatusText, setPaymentStatusText] = useState('');
+
+  const handlePayOnline = (paymentId, amount, label) => {
+    import('../utils/razorpay.js').then(({ processOnlinePayment }) => {
+      processOnlinePayment({
+        paymentId,
+        session,
+        amountLabel: `${label} (₹${amount})`,
+        pgName: properties[0]?.name || "StayZen Residency",
+        onSuccess: (msg) => {
+          notify(msg);
+          loadData();
+          if (onRefresh) onRefresh();
+        },
+        onFailure: (msg) => {
+          notify(`Payment failed: ${msg}`);
+        },
+        onProgress: (loading, text) => {
+          setPaymentLoading(loading);
+          setPaymentStatusText(text);
+        }
+      });
+    });
+  };
   const [actionError, setActionError] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
 
@@ -219,9 +244,11 @@ export default function PaymentsPage({ session, properties = [], members = [], o
           <h1>Payments Ledger</h1>
           <p>Track cash, card, UPI, bank transfers, and online settlement status in a single unified ledger.</p>
         </div>
-        <button className="primary" onClick={() => setRecordModal(true)} style={{ backgroundColor: 'var(--green)' }}>
-          <Plus size={17} /> Record Cash Payment
-        </button>
+        {userRole !== 'resident' && (
+          <button className="primary" onClick={() => setRecordModal(true)} style={{ backgroundColor: 'var(--green)' }}>
+            <Plus size={17} /> Record Cash Payment
+          </button>
+        )}
       </div>
 
       {/* Metrics Bar */}
@@ -401,6 +428,26 @@ export default function PaymentsPage({ session, properties = [], members = [], o
 
                 {/* Actions */}
                 <span style={{ flex: 1.5, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  {p.status !== 'paid' && (
+                    <button
+                      type="button"
+                      title="Pay Online"
+                      onClick={() => handlePayOnline(p._id, p.amount, p.invoiceMonth)}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        backgroundColor: 'var(--green)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Pay Online
+                    </button>
+                  )}
+
                   <button 
                     title="View & Print Receipt" 
                     onClick={() => setReceiptPayment(p)}
@@ -409,7 +456,7 @@ export default function PaymentsPage({ session, properties = [], members = [], o
                     <Printer size={14} />
                   </button>
 
-                  {isCash && (
+                  {isCash && userRole !== 'resident' && (
                     <>
                       <button 
                         title="Edit Cash Payment" 
@@ -602,6 +649,11 @@ export default function PaymentsPage({ session, properties = [], members = [], o
       )}
 
       {toast && <div className="toast">✓ {toast}</div>}
+      {paymentLoading && (
+        <div className="toast" style={{ backgroundColor: '#e0efe3', color: '#17644f', border: '1px solid #c2ffd4' }}>
+          🔄 {paymentStatusText || 'Processing payment...'}
+        </div>
+      )}
     </div>
   );
 }

@@ -252,10 +252,12 @@ export const getDashboardStats = () => {
     }
 
     return {
+      _id: p._id,
       name: resName,
       room: roomLabel,
       amount: p.amount,
       status,
+      rawStatus: p.status,
       date: dateStr,
       initials,
       color,
@@ -509,7 +511,10 @@ export const resendMockInvite = (id) => {
   return null;
 };
 
-export const getMockPayments = (orgId) => {
+export const getMockPayments = (orgId, isResident = false) => {
+  if (isResident) {
+    return mockPayments.filter(p => p.residentId === 'res-1' || p.residentId?._id === 'res-1');
+  }
   return mockPayments;
 };
 

@@ -85,7 +85,7 @@ export const resendInvite = asyncHandler(async (req, res) => {
  * GET all payment transactions
  */
 export const getPayments = asyncHandler(async (req, res) => {
-  const payments = await tenantService.getPayments(req.tenant);
+  const payments = await tenantService.getPayments(req.tenant, req.auth);
   res.json(payments);
 });
 
@@ -151,4 +151,20 @@ export const getAuditLogs = asyncHandler(async (req, res) => {
 export const triggerScheduledMaintenanceInvoices = asyncHandler(async (req, res) => {
   await tenantService.checkAndGeneratePropertyMaintenanceCharges(req.tenant);
   res.json({ success: true, message: 'Maintenance invoice generation triggered successfully.' });
+});
+
+/**
+ * POST / Initiate Razorpay Charge (Create Order)
+ */
+export const initiateCharge = asyncHandler(async (req, res) => {
+  const chargeInfo = await tenantService.initiateCharge(req.tenant, req.auth, req.params.id);
+  res.json(chargeInfo);
+});
+
+/**
+ * POST / Verify Razorpay Cryptographic Signature
+ */
+export const verifyOnlinePayment = asyncHandler(async (req, res) => {
+  const result = await tenantService.verifyOnlinePayment(req.tenant, req.auth, req.body);
+  res.json(result);
 });

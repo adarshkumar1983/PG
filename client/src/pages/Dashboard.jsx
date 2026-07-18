@@ -42,8 +42,32 @@ export function Dashboard({ session, onLogout }) {
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [active, setActive] = useState('Overview');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [modal, setModal] = useState(false);
   const [toast, setToast] = useState('');
+  const [modal, setModal] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentStatusText, setPaymentStatusText] = useState('');
+
+  const handlePayOnline = (paymentId, amount, label) => {
+    import('../utils/razorpay.js').then(({ processOnlinePayment }) => {
+      processOnlinePayment({
+        paymentId,
+        session,
+        amountLabel: `${label} (₹${amount})`,
+        pgName: data.property || "StayZen Residency",
+        onSuccess: (msg) => {
+          notify(msg);
+          refreshDashboardData();
+        },
+        onFailure: (msg) => {
+          notify(`Payment failed: ${msg}`);
+        },
+        onProgress: (loading, text) => {
+          setPaymentLoading(loading);
+          setPaymentStatusText(text);
+        }
+      });
+    });
+  };
 
   const [coords, setCoords] = useState({ top: 0, height: 0 });
   const [ready, setReady] = useState(false);
@@ -169,6 +193,8 @@ export function Dashboard({ session, onLogout }) {
       </div>
     );
   }
+
+  const pendingInvoice = data.payments?.find(p => p.rawStatus === 'due' || p.rawStatus === 'pending' || p.rawStatus === 'partially_paid');
 
   return (
 
@@ -326,6 +352,7 @@ export function Dashboard({ session, onLogout }) {
               session={session}
               properties={properties}
               members={members}
+              userRole={data.role}
               onRefresh={refreshDashboardData}
             />
           ) : active === 'Expenses' ? (
@@ -423,6 +450,34 @@ export function Dashboard({ session, onLogout }) {
                         <span className="total"><small>Total Rent Due</small><b>{money(data.stats.collected + data.stats.pending)}</b></span>
                       </div>
                     </div>
+                    {pendingInvoice && (
+                      <div style={{ padding: '0 28px 24px 28px', marginTop: '-10px' }}>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => handlePayOnline(pendingInvoice._id, pendingInvoice.amount, pendingInvoice.date)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            backgroundColor: 'var(--green)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '8px',
+                            transition: 'opacity 0.2s'
+                          }}
+                          onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
+                          onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                        >
+                          Pay Rent Online ({money(data.stats.pending)})
+                        </button>
+                      </div>
+                    )}
                   </section>
                   <section className="card attention">
                     <div className="card-head">
@@ -509,7 +564,27 @@ export function Dashboard({ session, onLogout }) {
                       <strong>{money(p.amount)}</strong>
                       <span><i className={`pill ${p.status.toLowerCase().replace(' ', '-')}`}>{p.status}</i></span>
                       <span className="date">{p.date}</span>
-                      <button className="more"><MoreHorizontal size={18} /></button>
+                      {data.role === 'resident' && p.rawStatus !== 'paid' ? (
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => handlePayOnline(p._id, p.amount, p.date)}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            backgroundColor: 'var(--green)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Pay Online
+                        </button>
+                      ) : (
+                        <button className="more"><MoreHorizontal size={18} /></button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -548,6 +623,11 @@ export function Dashboard({ session, onLogout }) {
         </div>
       )}
       {toast && <div className="toast">✓ {toast}</div>}
+      {paymentLoading && (
+        <div className="toast" style={{ backgroundColor: '#e0efe3', color: '#17644f', border: '1px solid #c2ffd4' }}>
+          🔄 {paymentStatusText || 'Processing payment...'}
+        </div>
+      )}
     </div>
   );
 }

@@ -17,6 +17,14 @@ const authorizeDashboard = (req, res, next) => {
   return res.status(403).json({ message: 'Insufficient permission.' });
 };
 
+const authorizePaymentsRead = (req, res, next) => {
+  const allowed = req.tenant?.permissions || [];
+  if (allowed.includes('*') || allowed.includes(permissions.PAYMENT_READ) || allowed.includes(permissions.PAYMENT_OWN_READ)) {
+    return next();
+  }
+  return res.status(403).json({ message: 'Insufficient permission.' });
+};
+
 router.get('/dashboard', authorizeDashboard, tenantController.getDashboard);
 
 router.route('/residents')
@@ -39,13 +47,15 @@ router.route('/members/:id')
 router.post('/members/:id/resend-invite', authorize(permissions.STAFF_MANAGE), tenantController.resendInvite);
 
 router.route('/payments')
-  .get(authorize(permissions.PAYMENT_READ), tenantController.getPayments);
+  .get(authorizePaymentsRead, tenantController.getPayments);
 
 router.route('/payments/:id')
   .put(authorize(permissions.PAYMENT_WRITE), tenantController.updatePayment)
   .delete(authorize(permissions.PAYMENT_WRITE), tenantController.deletePayment);
 
 router.post('/payments/record-cash', authorize(permissions.PAYMENT_WRITE), tenantController.recordCashPayment);
+router.post('/payments/:id/initiate-charge', authorizePaymentsRead, tenantController.initiateCharge);
+router.post('/payments/verify-online-payment', authorizePaymentsRead, tenantController.verifyOnlinePayment);
 router.post('/invoices', authorize(permissions.PAYMENT_WRITE), tenantController.createInvoice);
 
 router.route('/expenses')

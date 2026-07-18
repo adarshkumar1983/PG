@@ -11,6 +11,8 @@ import { sendInviteEmail } from '../utils/mailer.js';
 import * as mockStore from '../mockStore.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { MaintenanceConfig } from '../models/MaintenanceConfig.js';
+import crypto from 'crypto';
+import Razorpay from 'razorpay';
 
 export const isDbConnected = () => mongoose.connection.readyState === 1;
 
@@ -162,10 +164,12 @@ export async function getDashboard(tenant, auth) {
         : `Due for ${p.invoiceMonth}`;
 
       return {
+        _id: p._id,
         name: user?.name || 'You',
         room: `Room ${roomNumber} · ${bedLabel}`,
         amount: p.amount,
         status,
+        rawStatus: p.status,
         date: dateStr,
         initials: user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U',
         color: '#17644f'
@@ -774,9 +778,15 @@ export async function resendInvite(tenant, id) {
 /**
  * GET payments
  */
-export async function getPayments(tenant) {
-  if (!isDbConnected()) return mockStore.getMockPayments(tenant.organizationId);
-  return Payment.find({ organizationId: tenant.organizationId })
+export async function getPayments(tenant, auth) {
+  if (!isDbConnected()) return mockStore.getMockPayments(tenant.organizationId, tenant.role === 'resident');
+  const query = { organizationId: tenant.organizationId };
+  if (tenant.role === 'resident' && auth) {
+    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).lean();
+    if (!resident) return [];
+    query.residentId = resident._id;
+  }
+  return Payment.find(query)
     .populate('residentId', 'name mobile email roomId bedId')
     .populate('propertyId', 'name rooms')
     .sort({ createdAt: -1 })
@@ -1191,5 +1201,153 @@ export async function checkAndGeneratePropertyMaintenanceCharges(tenant) {
     );
     await property.save();
   }
+}
+
+export async function initiateCharge(tenant, auth, paymentId) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    // Mock flow
+    const mockPay = mockStore.mockPayments.find(p => p._id === paymentId);
+    if (!mockPay) {
+      throw new Error('Payment invoice not found.');
+    }
+    const outstanding = mockPay.amount - (mockPay.receivedAmount || 0);
+    if (outstanding <= 0) {
+      throw new Error('Payment already fully paid.');
+    }
+    const mockOrderId = 'order_mock_' + Math.random().toString(36).substr(2, 9);
+    mockPay.gatewayOrderId = mockOrderId;
+    return {
+      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_mockkey123',
+      orderId: mockOrderId,
+      amount: outstanding * 100, // paise
+      currency: 'INR',
+      paymentId: mockPay._id,
+      isMock: true
+    };
+  }
+
+  // Real flow
+  const payment = await Payment.findOne({ _id: paymentId, organizationId: tenant.organizationId });
+  if (!payment) {
+    throw new Error('Payment invoice not found.');
+  }
+
+  const outstanding = payment.amount - (payment.receivedAmount || 0);
+  if (outstanding <= 0) {
+    throw new Error('Payment already fully paid.');
+  }
+
+  const rzpKeyId = process.env.RAZORPAY_KEY_ID;
+  const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!rzpKeyId || !rzpKeySecret) {
+    // If keys are not set but DB is online, return a simulated order ID to allow testing without keys
+    const mockOrderId = 'order_simulated_' + Math.random().toString(36).substr(2, 9);
+    payment.gatewayOrderId = mockOrderId;
+    await payment.save();
+    return {
+      keyId: 'rzp_test_simulatedkey123',
+      orderId: mockOrderId,
+      amount: outstanding * 100,
+      currency: 'INR',
+      paymentId: payment._id,
+      isMock: true
+    };
+  }
+
+  const razorpay = new Razorpay({
+    key_id: rzpKeyId,
+    key_secret: rzpKeySecret
+  });
+
+  const order = await razorpay.orders.create({
+    amount: Math.round(outstanding * 100),
+    currency: 'INR',
+    receipt: payment._id.toString()
+  });
+
+  payment.gatewayOrderId = order.id;
+  await payment.save();
+
+  return {
+    keyId: rzpKeyId,
+    orderId: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    paymentId: payment._id
+  };
+}
+
+export async function verifyOnlinePayment(tenant, auth, payload) {
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature, paymentId } = payload;
+
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    // Mock validation
+    const mockPay = mockStore.mockPayments.find(p => p.gatewayOrderId === razorpay_order_id || p._id === paymentId);
+    if (!mockPay) {
+      throw new Error('Mock payment not found.');
+    }
+    const outstanding = mockPay.amount - (mockPay.receivedAmount || 0);
+    mockPay.status = 'paid';
+    mockPay.receivedAmount = mockPay.amount;
+    mockPay.method = 'online_gateway';
+    mockPay.gatewayPaymentId = razorpay_payment_id || 'pay_mock_success';
+    mockPay.paidAt = new Date().toISOString();
+    mockPay.transactions.push({
+      amount: outstanding,
+      paidAt: new Date().toISOString(),
+      method: 'online_gateway',
+      referenceNumber: razorpay_payment_id || 'pay_mock_success',
+      notes: 'Paid online via Razorpay (Mock)'
+    });
+    return { success: true, message: 'Mock payment verified successfully.', payment: mockPay };
+  }
+
+  // Real DB flow
+  const payment = await Payment.findOne({
+    $or: [{ gatewayOrderId: razorpay_order_id }, { _id: paymentId }],
+    organizationId: tenant.organizationId
+  });
+  if (!payment) {
+    throw new Error('Payment invoice not found.');
+  }
+
+  const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (rzpKeySecret && razorpay_signature) {
+    // Perform cryptographic verification
+    const text = razorpay_order_id + '|' + razorpay_payment_id;
+    const generated_signature = crypto
+      .createHmac('sha256', rzpKeySecret)
+      .update(text)
+      .digest('hex');
+
+    if (generated_signature !== razorpay_signature) {
+      throw new Error('Razorpay signature verification failed.');
+    }
+  }
+
+  const outstanding = payment.amount - (payment.receivedAmount || 0);
+  if (outstanding > 0) {
+    payment.transactions.push({
+      amount: outstanding,
+      paidAt: new Date(),
+      method: 'online_gateway',
+      referenceNumber: razorpay_payment_id || 'simulated_txn_' + Date.now(),
+      notes: 'Paid online via Razorpay'
+    });
+    payment.receivedAmount = payment.amount;
+    payment.status = 'paid';
+    payment.method = 'online_gateway';
+    payment.gatewayPaymentId = razorpay_payment_id || 'simulated_txn_' + Date.now();
+    payment.paidAt = new Date();
+    payment.history.push({
+      action: 'payment_recorded',
+      timestamp: new Date(),
+      details: { amount: outstanding, method: 'online_gateway', referenceNumber: razorpay_payment_id }
+    });
+    await payment.save();
+  }
+
+  return { success: true, message: 'Payment verified and recorded successfully.', payment };
 }
 

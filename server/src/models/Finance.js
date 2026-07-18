@@ -20,6 +20,7 @@ const paymentSchema = new mongoose.Schema({
   lateFee: { type: Number, default: 0 },
   method: { type: String, enum: ['cash', 'upi', 'bank_transfer', 'card', 'online_gateway'] },
   gatewayPaymentId: String,
+  gatewayOrderId: String,
   gatewaySettlementId: String,
   status: { type: String, enum: ['due', 'pending', 'paid', 'partially_paid', 'failed', 'refunded'], default: 'due' },
   paidAt: Date,
