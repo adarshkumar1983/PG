@@ -17,6 +17,7 @@ import PaymentsPage from './PaymentsPage.jsx';
 import ExpensesPage from './ExpensesPage.jsx';
 import ReportsPage from './ReportsPage.jsx';
 import MaintenancePage from './MaintenancePage.jsx';
+import SettingsPage from './SettingsPage.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
@@ -257,7 +258,19 @@ export function Dashboard({ session, onLogout }) {
         </nav>
 
         <div className="sidebar-bottom">
-          <button><Settings size={19} />Settings</button>
+          {data.role !== 'resident' && (
+            <button
+              type="button"
+              className={active === 'Settings' ? 'active' : ''}
+              onClick={() => { setActive('Settings'); setMenuOpen(false); }}
+              style={{
+                background: active === 'Settings' ? 'var(--nav-active-bg)' : 'transparent',
+                color: active === 'Settings' ? 'var(--nav-active-color)' : 'var(--text-secondary)'
+              }}
+            >
+              <Settings size={19} />Settings
+            </button>
+          )}
           <button><HelpCircle size={19} />Help & support</button>
           <div className="account" title={session.user?.email || 'No email set'}>
             <span className="avatar small">{session.user?.name ? session.user.name.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase() : 'AK'}</span>
@@ -373,6 +386,10 @@ export function Dashboard({ session, onLogout }) {
               session={session}
               properties={properties}
               onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Settings' ? (
+            <SettingsPage
+              session={session}
             />
           ) : (
             <>
@@ -492,6 +509,36 @@ export function Dashboard({ session, onLogout }) {
                       <p style={{ margin: '0' }}>⏰ <b>Gate Timings:</b> Main gate is closed from 11:00 PM to 6:00 AM daily.</p>
                     </div>
                   </section>
+
+                  {((data.upiId) || (data.bankDetails && data.bankDetails.accountNumber)) && (
+                    <section className="card">
+                      <div className="card-head">
+                        <div>
+                          <h2>Settlement Details</h2>
+                          <p>Direct payment accounts</p>
+                        </div>
+                      </div>
+                      <div style={{ padding: '20px', fontSize: '13px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
+                        {data.upiId && (
+                          <div style={{ marginBottom: '14px' }}>
+                            <span style={{ display: 'block', fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>UPI ID</span>
+                            <code style={{ background: 'var(--table-head-bg)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{data.upiId}</code>
+                          </div>
+                        )}
+                        {data.bankDetails && data.bankDetails.accountNumber && (
+                          <div>
+                            <span style={{ display: 'block', fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '4px' }}>Bank Transfer</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--card-bg)', border: '1px solid var(--border)', padding: '10px', borderRadius: '6px' }}>
+                              <div><strong>A/C Name:</strong> {data.bankDetails.accountName}</div>
+                              <div><strong>A/C Number:</strong> {data.bankDetails.accountNumber}</div>
+                              <div><strong>Bank:</strong> {data.bankDetails.bankName}</div>
+                              <div><strong>IFSC:</strong> {data.bankDetails.ifscCode}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 </div>
               ) : (
                 <div className="dashboard-grid">

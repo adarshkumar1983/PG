@@ -66,4 +66,8 @@ router.get('/audit-logs', authorize(permissions.REPORT_READ), tenantController.g
 
 router.post('/maintenance-configs/trigger', authorize(permissions.PAYMENT_WRITE), tenantController.triggerScheduledMaintenanceInvoices);
 
+router.route('/organization')
+  .get(authorize(permissions.MANAGE_PG), tenantController.getOrganizationSettings)
+  .put(authorize(permissions.MANAGE_PG), tenantController.updateOrganizationSettings);
+
 export default router;

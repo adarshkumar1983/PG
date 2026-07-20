@@ -168,3 +168,19 @@ export const verifyOnlinePayment = asyncHandler(async (req, res) => {
   const result = await tenantService.verifyOnlinePayment(req.tenant, req.auth, req.body);
   res.json(result);
 });
+
+/**
+ * GET / Get Organization settings
+ */
+export const getOrganizationSettings = asyncHandler(async (req, res) => {
+  const settings = await tenantService.getOrganizationSettings(req.tenant);
+  res.json(settings);
+});
+
+/**
+ * PUT / Update Organization settings
+ */
+export const updateOrganizationSettings = asyncHandler(async (req, res) => {
+  const updated = await tenantService.updateOrganizationSettings(req.tenant, { ...req.body, userId: req.auth.sub });
+  res.json(updated);
+});

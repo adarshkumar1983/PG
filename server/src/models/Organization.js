@@ -11,6 +11,15 @@ const organizationSchema = new mongoose.Schema({
     provider: { type: String, enum: ['razorpay', 'cashfree', 'none'], default: 'none' },
     linkedAccountId: String,
     onboardingStatus: { type: String, enum: ['not_started', 'pending', 'active', 'restricted'], default: 'not_started' }
+  },
+  razorpayKeyId: { type: String, trim: true },
+  razorpayKeySecret: { type: String, trim: true, select: false },
+  upiId: { type: String, trim: true },
+  bankDetails: {
+    accountName: { type: String, trim: true },
+    accountNumber: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    ifscCode: { type: String, trim: true }
   }
 }, { timestamps: true });
 

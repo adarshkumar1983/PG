@@ -118,6 +118,7 @@ export async function getDashboard(tenant, auth) {
   // Resident flow
   if (tenant.role === 'resident') {
     const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).populate('propertyId').lean();
+    const org = await Organization.findById(tenant.organizationId).lean();
     if (!resident) {
       return {
         property: 'Not Assigned',
@@ -200,6 +201,8 @@ export async function getDashboard(tenant, auth) {
       ],
       payments: formattedPayments,
       role: 'resident',
+      upiId: org?.upiId || '',
+      bankDetails: org?.bankDetails || null,
       residentDetails: {
         propertyName: prop?.name || 'N/A',
         address: prop?.address || 'N/A',
@@ -1237,11 +1240,15 @@ export async function initiateCharge(tenant, auth, paymentId) {
     throw new Error('Payment already fully paid.');
   }
 
+  // Fetch organization profile to get linkedAccountId
+  const org = await Organization.findById(tenant.organizationId).lean();
+
+  // Always use the Platform's global keys from .env
   const rzpKeyId = process.env.RAZORPAY_KEY_ID;
   const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
   if (!rzpKeyId || !rzpKeySecret) {
-    // If keys are not set but DB is online, return a simulated order ID to allow testing without keys
+    // If keys are not set, return simulated response for development
     const mockOrderId = 'order_simulated_' + Math.random().toString(36).substr(2, 9);
     payment.gatewayOrderId = mockOrderId;
     await payment.save();
@@ -1260,11 +1267,31 @@ export async function initiateCharge(tenant, auth, paymentId) {
     key_secret: rzpKeySecret
   });
 
-  const order = await razorpay.orders.create({
-    amount: Math.round(outstanding * 100),
+  const totalAmount = Math.round(outstanding * 100); // paise
+
+  const orderPayload = {
+    amount: totalAmount,
     currency: 'INR',
     receipt: payment._id.toString()
-  });
+  };
+
+  // If a linked account is set, calculate the split
+  if (org && org.gateway && org.gateway.linkedAccountId) {
+    // Calculate commission (2%)
+    const commission = Math.round(totalAmount * 0.02);
+    const routeAmount = totalAmount - commission;
+
+    orderPayload.transfers = [
+      {
+        account: org.gateway.linkedAccountId,
+        amount: routeAmount,
+        currency: 'INR',
+        on_hold: false
+      }
+    ];
+  }
+
+  const order = await razorpay.orders.create(orderPayload);
 
   payment.gatewayOrderId = order.id;
   await payment.save();
@@ -1312,7 +1339,9 @@ export async function verifyOnlinePayment(tenant, auth, payload) {
     throw new Error('Payment invoice not found.');
   }
 
+  // Always verify payment signature using the platform's global Key Secret
   const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
   if (rzpKeySecret && razorpay_signature) {
     // Perform cryptographic verification
     const text = razorpay_order_id + '|' + razorpay_payment_id;
@@ -1349,5 +1378,104 @@ export async function verifyOnlinePayment(tenant, auth, payload) {
   }
 
   return { success: true, message: 'Payment verified and recorded successfully.', payment };
+}
+
+/**
+ * GET Organization details
+ */
+export async function getOrganizationSettings(tenant) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    // Return mock organization info
+    return {
+      _id: 'demo-org',
+      name: 'Greenview Residency (Demo)',
+      slug: 'greenview-residency-demo',
+      linkedAccountId: 'acc_demo123456789',
+      upiId: 'owner@okaxis',
+      bankDetails: {
+        accountName: 'StayZen Realty Demo',
+        accountNumber: '1234567890',
+        bankName: 'HDFC Bank',
+        ifscCode: 'HDFC0000123'
+      }
+    };
+  }
+
+  // Fetch real organization settings
+  const org = await Organization.findById(tenant.organizationId).lean();
+  if (!org) {
+    throw new Error('Organization not found.');
+  }
+
+  return {
+    _id: org._id,
+    name: org.name,
+    slug: org.slug,
+    linkedAccountId: org.gateway?.linkedAccountId || '',
+    upiId: org.upiId || '',
+    bankDetails: org.bankDetails || {
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      ifscCode: ''
+    }
+  };
+}
+
+/**
+ * PUT / Update Organization details
+ */
+export async function updateOrganizationSettings(tenant, data) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    // For mock store, update mock details (not persistent, but returns success)
+    return { success: true, message: 'Settings saved (Demo mode)' };
+  }
+
+  const org = await Organization.findById(tenant.organizationId);
+  if (!org) {
+    throw new Error('Organization not found.');
+  }
+
+  // Update fields
+  if (data.name) org.name = data.name;
+  if (data.upiId !== undefined) org.upiId = data.upiId;
+  
+  if (data.linkedAccountId !== undefined) {
+    org.gateway = {
+      ...org.gateway,
+      linkedAccountId: data.linkedAccountId,
+      provider: data.linkedAccountId ? 'razorpay' : 'none'
+    };
+  }
+
+  if (data.bankDetails) {
+    org.bankDetails = {
+      accountName: data.bankDetails.accountName || '',
+      accountNumber: data.bankDetails.accountNumber || '',
+      bankName: data.bankDetails.bankName || '',
+      ifscCode: data.bankDetails.ifscCode || ''
+    };
+  }
+
+  await org.save();
+
+  // AuditLog
+  await AuditLog.create({
+    organizationId: tenant.organizationId,
+    performedBy: data.userId || tenant.organizationId,
+    action: 'update',
+    entityType: 'Organization',
+    entityId: org._id,
+    details: { name: org.name, upiId: org.upiId, linkedAccountId: data.linkedAccountId }
+  });
+
+  return {
+    _id: org._id,
+    name: org.name,
+    slug: org.slug,
+    linkedAccountId: org.gateway?.linkedAccountId || '',
+    upiId: org.upiId || '',
+    bankDetails: org.bankDetails
+  };
 }
 
