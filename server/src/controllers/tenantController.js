@@ -184,3 +184,27 @@ export const updateOrganizationSettings = asyncHandler(async (req, res) => {
   const updated = await tenantService.updateOrganizationSettings(req.tenant, { ...req.body, userId: req.auth.sub });
   res.json(updated);
 });
+
+/**
+ * GET / Get Settlement Analytics & History
+ */
+export const getSettlementAnalytics = asyncHandler(async (req, res) => {
+  const analytics = await tenantService.getSettlementAnalytics(req.tenant);
+  res.json(analytics);
+});
+
+/**
+ * GET / Get Notifications
+ */
+export const getNotifications = asyncHandler(async (req, res) => {
+  const notifications = await tenantService.getNotifications(req.tenant);
+  res.json(notifications);
+});
+
+/**
+ * PUT / Mark Notification as Read
+ */
+export const markNotificationRead = asyncHandler(async (req, res) => {
+  const result = await tenantService.markNotificationRead(req.tenant, req.params.id);
+  res.json(result);
+});

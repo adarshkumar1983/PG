@@ -56,58 +56,11 @@ app.post('/api/payments/webhook', async (req, res) => {
   }
 
   const { event, payload } = req.body;
-  if (event === 'payment.captured' || event === 'order.paid') {
-    const paymentData = payload.payment?.entity;
-    const orderId = paymentData?.order_id;
-
-    if (orderId) {
-      if (mongoose.connection.readyState === 1) {
-        try {
-          const { Payment } = await import('./models/Finance.js');
-          const paymentRecord = await Payment.findOne({ gatewayOrderId: orderId });
-          if (paymentRecord && paymentRecord.status !== 'paid') {
-            const outstanding = paymentRecord.amount - (paymentRecord.receivedAmount || 0);
-            paymentRecord.transactions.push({
-              amount: outstanding,
-              paidAt: new Date(),
-              method: 'online_gateway',
-              referenceNumber: paymentData.id,
-              notes: 'Paid online via Razorpay (Webhook)'
-            });
-            paymentRecord.receivedAmount = paymentRecord.amount;
-            paymentRecord.status = 'paid';
-            paymentRecord.method = 'online_gateway';
-            paymentRecord.gatewayPaymentId = paymentData.id;
-            paymentRecord.paidAt = new Date();
-            paymentRecord.history.push({
-              action: 'payment_recorded',
-              timestamp: new Date(),
-              details: { amount: outstanding, method: 'online_gateway', referenceNumber: paymentData.id, via: 'webhook' }
-            });
-            await paymentRecord.save();
-            console.log(`Payment with order ID ${orderId} successfully captured via webhook.`);
-          }
-        } catch (err) {
-          console.error('Error processing webhook payment capture:', err);
-        }
-      } else {
-        // Mock store update
-        try {
-          const { mockPayments } = await import('./mockStore.js');
-          const mockPay = mockPayments.find(p => p.gatewayOrderId === orderId);
-          if (mockPay && mockPay.status !== 'paid') {
-            mockPay.status = 'paid';
-            mockPay.receivedAmount = mockPay.amount;
-            mockPay.method = 'online_gateway';
-            mockPay.gatewayPaymentId = paymentData.id;
-            mockPay.paidAt = new Date().toISOString();
-            console.log(`Mock payment with order ID ${orderId} captured via webhook.`);
-          }
-        } catch (err) {
-          console.error('Mock webhook import err:', err);
-        }
-      }
-    }
+  try {
+    const tenantService = await import('./services/tenantService.js');
+    await tenantService.handleRazorpayWebhook(event, payload);
+  } catch (err) {
+    console.error('Error handling webhook event:', err);
   }
 
   res.json({ status: 'ok' });

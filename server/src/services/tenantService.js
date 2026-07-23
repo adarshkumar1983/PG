@@ -11,6 +11,7 @@ import { sendInviteEmail } from '../utils/mailer.js';
 import * as mockStore from '../mockStore.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { MaintenanceConfig } from '../models/MaintenanceConfig.js';
+import { Notification } from '../models/Notification.js';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 
@@ -1477,5 +1478,255 @@ export async function updateOrganizationSettings(tenant, data) {
     upiId: org.upiId || '',
     bankDetails: org.bankDetails
   };
+}
+
+/**
+ * Razorpay Webhook Handler for Enterprise Settlement Lifecycle
+ */
+export async function handleRazorpayWebhook(event, payload) {
+  if (!isDbConnected()) return { status: 'mock_ignored' };
+
+  if (event === 'payment.captured' || event === 'order.paid') {
+    const paymentEntity = payload.payment?.entity;
+    const orderId = paymentEntity?.order_id;
+    const paymentId = paymentEntity?.id;
+
+    if (!orderId && !paymentId) return;
+
+    const paymentRecord = await Payment.findOne({
+      $or: [{ gatewayOrderId: orderId }, { paymentId: paymentId }, { _id: paymentEntity?.notes?.paymentId }]
+    });
+
+    if (paymentRecord && paymentRecord.status !== 'paid') {
+      const amount = paymentRecord.amount;
+      const platformFee = Math.round(amount * 0.02 * 100) / 100; // 2%
+      const ownerAmount = Math.round((amount - platformFee) * 100) / 100; // 98%
+
+      const expSettlement = new Date();
+      expSettlement.setDate(expSettlement.getDate() + 2); // 2 business days
+
+      paymentRecord.status = 'paid';
+      paymentRecord.paymentStatus = 'verified';
+      paymentRecord.settlementStatus = 'processing';
+      paymentRecord.paymentId = paymentId || paymentRecord.paymentId;
+      paymentRecord.platformFee = platformFee;
+      paymentRecord.ownerAmount = ownerAmount;
+      paymentRecord.expectedSettlementDate = expSettlement;
+      paymentRecord.receivedAmount = amount;
+      paymentRecord.method = 'online_gateway';
+      paymentRecord.paidAt = new Date();
+      paymentRecord.gatewayPaymentId = paymentId;
+
+      paymentRecord.transactions.push({
+        amount: amount,
+        paidAt: new Date(),
+        method: 'online_gateway',
+        referenceNumber: paymentId || 'webhook_cap',
+        notes: 'Paid online via Razorpay (Webhook)'
+      });
+
+      await paymentRecord.save();
+
+      // Trigger notification
+      const resident = await Resident.findById(paymentRecord.residentId).lean();
+      const residentName = resident?.name || 'Resident';
+
+      await Notification.create({
+        organizationId: paymentRecord.organizationId,
+        title: 'Rent Payment Captured',
+        message: `${residentName} has successfully paid ₹${new Intl.NumberFormat('en-IN').format(amount)} for ${paymentRecord.invoiceMonth} rent.`,
+        type: 'payment',
+        data: {
+          paymentId: paymentRecord._id,
+          amount,
+          platformFee,
+          ownerAmount,
+          residentName
+        }
+      });
+    }
+  } else if (event === 'transfer.processed') {
+    const transferEntity = payload.transfer?.entity;
+    const transferId = transferEntity?.id;
+    const paymentId = transferEntity?.payment_id;
+
+    const paymentRecord = await Payment.findOne({
+      $or: [{ paymentId: paymentId }, { transferId: transferId }]
+    });
+
+    if (paymentRecord) {
+      paymentRecord.transferId = transferId || paymentRecord.transferId;
+      paymentRecord.settlementStatus = 'processing';
+      await paymentRecord.save();
+
+      await Notification.create({
+        organizationId: paymentRecord.organizationId,
+        title: 'Settlement Initiated',
+        message: `Transfer of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount || paymentRecord.amount)} initiated via Razorpay Route.`,
+        type: 'settlement',
+        data: { paymentId: paymentRecord._id, transferId }
+      });
+    }
+  } else if (event === 'settlement.processed') {
+    const settlementEntity = payload.settlement?.entity;
+    const settlementId = settlementEntity?.id;
+
+    const payments = await Payment.find({
+      organizationId: { $exists: true },
+      settlementStatus: 'processing'
+    });
+
+    for (const paymentRecord of payments) {
+      paymentRecord.settlementStatus = 'completed';
+      paymentRecord.settledAt = new Date();
+      paymentRecord.gatewaySettlementId = settlementId;
+      await paymentRecord.save();
+
+      await Notification.create({
+        organizationId: paymentRecord.organizationId,
+        title: 'Settlement Completed',
+        message: `Funds of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount)} transferred to bank account.`,
+        type: 'settlement',
+        data: { paymentId: paymentRecord._id, settlementId }
+      });
+    }
+  } else if (event === 'transfer.failed') {
+    const transferEntity = payload.transfer?.entity;
+    const transferId = transferEntity?.id;
+
+    const paymentRecord = await Payment.findOne({ transferId });
+    if (paymentRecord) {
+      paymentRecord.settlementStatus = 'failed';
+      paymentRecord.failureReason = transferEntity?.error_description || 'Route transfer failed';
+      await paymentRecord.save();
+
+      await Notification.create({
+        organizationId: paymentRecord.organizationId,
+        title: 'Settlement Transfer Failed',
+        message: `Transfer of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount)} failed. Logged for reconciliation.`,
+        type: 'system',
+        data: { paymentId: paymentRecord._id, error: paymentRecord.failureReason }
+      });
+    }
+  }
+}
+
+/**
+ * GET Settlement Analytics for Owner Dashboard
+ */
+export async function getSettlementAnalytics(tenant) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    return {
+      monthlyEarnings: 462500,
+      pendingSettlements: 49000,
+      totalFeeCollected: 9250,
+      completedSettlementsCount: 18,
+      recentSettlements: mockStore.mockPayments.map(p => ({
+        ...p,
+        platformFee: Math.round(p.amount * 0.02),
+        ownerAmount: Math.round(p.amount * 0.98),
+        settlementStatus: p.status === 'paid' ? 'completed' : 'processing',
+        expectedSettlementDate: new Date(Date.now() + 86400000).toISOString()
+      }))
+    };
+  }
+
+  const payments = await Payment.find({ organizationId: tenant.organizationId })
+    .populate('residentId', 'name room bed')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  let monthlyEarnings = 0;
+  let pendingSettlements = 0;
+  let totalFeeCollected = 0;
+  let completedSettlementsCount = 0;
+
+  const currentMonthName = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  const formattedSettlements = payments.map(p => {
+    const amount = p.amount || 0;
+    const platformFee = p.platformFee || Math.round(amount * 0.02 * 100) / 100;
+    const ownerAmount = p.ownerAmount || Math.round((amount - platformFee) * 100) / 100;
+    const isPaid = p.status === 'paid';
+
+    if (isPaid) {
+      if (p.invoiceMonth === currentMonthName || !p.invoiceMonth) {
+        monthlyEarnings += ownerAmount;
+      }
+      totalFeeCollected += platformFee;
+
+      if (p.settlementStatus === 'completed') {
+        completedSettlementsCount += 1;
+      } else {
+        pendingSettlements += ownerAmount;
+      }
+    }
+
+    const expDate = p.expectedSettlementDate || new Date(new Date(p.paidAt || p.createdAt).getTime() + 2 * 24 * 60 * 60 * 1000);
+
+    return {
+      ...p,
+      residentName: p.residentId?.name || p.name || 'Resident',
+      platformFee,
+      ownerAmount,
+      settlementStatus: p.settlementStatus || (isPaid ? 'processing' : 'pending'),
+      paymentStatus: p.paymentStatus || (isPaid ? 'verified' : 'initiated'),
+      expectedSettlementDate: expDate
+    };
+  });
+
+  return {
+    monthlyEarnings,
+    pendingSettlements,
+    totalFeeCollected,
+    completedSettlementsCount,
+    recentSettlements: formattedSettlements
+  };
+}
+
+/**
+ * GET Notifications
+ */
+export async function getNotifications(tenant) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    return [
+      {
+        _id: 'n1',
+        title: 'Rent Payment Captured',
+        message: 'Adarsh Kumar has successfully paid ₹10,000 for July 2026 rent.',
+        type: 'payment',
+        read: false,
+        createdAt: new Date().toISOString(),
+        data: { amount: 10000, platformFee: 200, ownerAmount: 9800, residentName: 'Adarsh Kumar' }
+      },
+      {
+        _id: 'n2',
+        title: 'Settlement Initiated',
+        message: 'Transfer of ₹9,800 initiated via Razorpay Route.',
+        type: 'settlement',
+        read: true,
+        createdAt: new Date(Date.now() - 3600000).toISOString()
+      }
+    ];
+  }
+
+  return await Notification.find({ organizationId: tenant.organizationId })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+}
+
+/**
+ * Mark notification as read
+ */
+export async function markNotificationRead(tenant, notificationId) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    return { success: true };
+  }
+  await Notification.findOneAndUpdate(
+    { _id: notificationId, organizationId: tenant.organizationId },
+    { read: true }
+  );
+  return { success: true };
 }
 

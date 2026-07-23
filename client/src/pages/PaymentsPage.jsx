@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, IndianRupee, Printer, Edit2, Trash2, Calendar, FileText, Check, X, ShieldAlert } from 'lucide-react';
+import { Search, Plus, IndianRupee, Printer, Edit2, Trash2, Calendar, FileText, Check, X, ShieldAlert, ArrowRightLeft } from 'lucide-react';
 import RecordPaymentModal from '../components/RecordPaymentModal.jsx';
 import ReceiptModal from '../components/ReceiptModal.jsx';
+import SettlementDetailsModal from '../components/SettlementDetailsModal.jsx';
+import OwnerAnalyticsCard from '../components/OwnerAnalyticsCard.jsx';
+import NotificationCenter from '../components/NotificationCenter.jsx';
 import { money } from '../utils/formatters.js';
 
 export default function PaymentsPage({ session, properties = [], members = [], userRole, onRefresh }) {
@@ -9,6 +12,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
   const [residents, setResidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [analytics, setAnalytics] = useState(null);
+  const [selectedSettlement, setSelectedSettlement] = useState(null);
 
   // Filters
   const [methodFilter, setMethodFilter] = useState('all');
@@ -18,6 +23,19 @@ export default function PaymentsPage({ session, properties = [], members = [], u
   // Modals state
   const [recordModal, setRecordModal] = useState(false);
   const [receiptPayment, setReceiptPayment] = useState(null);
+
+  useEffect(() => {
+    if (!session?.accessToken || userRole === 'resident') return;
+    fetch('/api/tenant/settlements/analytics', {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'x-organization-id': session.organizationId
+      }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setAnalytics(data))
+      .catch(() => { });
+  }, [session, userRole]);
   const [editPayment, setEditPayment] = useState(null);
   const [deletePaymentId, setDeletePaymentId] = useState(null);
   const [toast, setToast] = useState('');
@@ -244,11 +262,14 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <h1>Payments Ledger</h1>
           <p>Track cash, card, UPI, bank transfers, and online settlement status in a single unified ledger.</p>
         </div>
-        {userRole !== 'resident' && (
-          <button className="primary" onClick={() => setRecordModal(true)} style={{ backgroundColor: 'var(--green)' }}>
-            <Plus size={17} /> Record Cash Payment
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <NotificationCenter session={session} onSelectPayment={(p) => setSelectedSettlement(p)} />
+          {userRole !== 'resident' && (
+            <button className="primary" onClick={() => setRecordModal(true)} style={{ backgroundColor: 'var(--green)' }}>
+              <Plus size={17} /> Record Cash Payment
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Metrics Bar */}
@@ -277,6 +298,10 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Unified ledger total</span>
         </article>
       </div>
+
+      {userRole !== 'resident' && analytics && (
+        <OwnerAnalyticsCard analytics={analytics} onSelectPayment={(p) => setSelectedSettlement(p)} />
+      )}
 
       {/* Filters and Search Bar */}
       <div className="payments-filters-row">
@@ -444,6 +469,29 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                       }}
                     >
                       Pay Online
+                    </button>
+                  )}
+
+                  {p.status === 'paid' && (
+                    <button
+                      type="button"
+                      title="View Settlement Details & Timeline"
+                      onClick={() => setSelectedSettlement(p)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        backgroundColor: '#ebf5ff',
+                        color: '#2563eb',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '6px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <ArrowRightLeft size={12} /> Settlement
                     </button>
                   )}
 
@@ -636,7 +684,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
               <button className="secondary" onClick={() => setDeletePaymentId(null)} disabled={actionSaving}>Cancel</button>
               <button
                 className="primary"
-                onClick={handleDeleteSubmit}
+                onConfirm={handleDeleteSubmit}
                 disabled={actionSaving}
                 style={{ backgroundColor: 'var(--color-danger)' }}
               >

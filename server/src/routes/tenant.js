@@ -70,4 +70,8 @@ router.route('/organization')
   .get(authorize(permissions.MANAGE_PG), tenantController.getOrganizationSettings)
   .put(authorize(permissions.MANAGE_PG), tenantController.updateOrganizationSettings);
 
+router.get('/settlements/analytics', authorizePaymentsRead, tenantController.getSettlementAnalytics);
+router.get('/notifications', authorizePaymentsRead, tenantController.getNotifications);
+router.put('/notifications/:id/read', authorizePaymentsRead, tenantController.markNotificationRead);
+
 export default router;

@@ -18,6 +18,7 @@ import ExpensesPage from './ExpensesPage.jsx';
 import ReportsPage from './ReportsPage.jsx';
 import MaintenancePage from './MaintenancePage.jsx';
 import SettingsPage from './SettingsPage.jsx';
+import NotificationCenter from '../components/NotificationCenter.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
@@ -318,7 +319,7 @@ export function Dashboard({ session, onLogout }) {
             <input placeholder="Search residents, rooms, payments..." />
             <kbd>⌘ K</kbd>
           </div>
-          <button className="icon-button"><Bell size={20} /><em /></button>
+          <NotificationCenter session={session} />
 
           <ThemeToggle />
 
