@@ -1437,6 +1437,29 @@ export async function updateOrganizationSettings(tenant, data) {
     throw new Error('Organization not found.');
   }
 
+  // Server-side format validations
+  if (data.upiId) {
+    const upiRegex = /^[\w.-]+@[\w.-]+$/;
+    if (!upiRegex.test(data.upiId)) {
+      throw new Error('Invalid UPI ID format. Standard format: staying@okaxis');
+    }
+  }
+
+  if (data.bankDetails) {
+    if (data.bankDetails.ifscCode) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(data.bankDetails.ifscCode)) {
+        throw new Error('Invalid IFSC Code format. Code must be 11 characters, e.g. HDFC0000123');
+      }
+    }
+    if (data.bankDetails.accountNumber) {
+      const accNumRegex = /^\d{9,18}$/;
+      if (!accNumRegex.test(data.bankDetails.accountNumber)) {
+        throw new Error('Invalid Account Number. Must be digits only and length between 9 and 18.');
+      }
+    }
+  }
+
   // Update fields
   if (data.name) org.name = data.name;
   if (data.upiId !== undefined) org.upiId = data.upiId;
@@ -1478,6 +1501,121 @@ export async function updateOrganizationSettings(tenant, data) {
     upiId: org.upiId || '',
     bankDetails: org.bankDetails
   };
+}
+
+/**
+ * POST / Verify Bank Account Details using IMPS Penny Drop
+ */
+export async function verifyBankAccount(tenant, data) {
+  const { accountName, accountNumber, ifscCode } = data;
+  if (!accountName || !accountNumber || !ifscCode) {
+    throw new Error('Account Name, Account Number, and IFSC Code are required.');
+  }
+
+  // Formats Check
+  const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+  if (!ifscRegex.test(ifscCode)) {
+    throw new Error('Invalid IFSC Code format.');
+  }
+
+  const accNumRegex = /^\d{9,18}$/;
+  if (!accNumRegex.test(accountNumber)) {
+    throw new Error('Account Number must be between 9 and 18 digits.');
+  }
+
+  // Check if Razorpay keys are configured and are LIVE keys
+  const rzpKeyId = process.env.RAZORPAY_KEY_ID;
+  const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  const isLiveKey = rzpKeyId && rzpKeyId.startsWith('rzp_live');
+
+  const { evaluateNameMatch } = await import('../utils/nameMatcher.js');
+
+  if (!isLiveKey || !rzpKeySecret || tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    // Simulated Penny Drop (fallback for dev environment/demo mode)
+    const inputNameUpper = accountName.toUpperCase().trim();
+    let mockRegisteredName = inputNameUpper;
+    
+    if (inputNameUpper.includes('STAYZEN')) {
+      mockRegisteredName = 'STAYZEN REALTY PRIVATE LIMITED';
+    } else if (inputNameUpper.includes('ARJUN')) {
+      mockRegisteredName = 'ARJUN MEHTA';
+    } else {
+      mockRegisteredName = 'MR. ' + inputNameUpper;
+    }
+
+    const evaluation = evaluateNameMatch(accountName, mockRegisteredName);
+
+    return {
+      success: true,
+      isMock: true,
+      registeredName: mockRegisteredName,
+      score: evaluation.score,
+      matched: evaluation.matched,
+      text: evaluation.text,
+      color: evaluation.color,
+      bankRef: 'IMPSRef_' + Math.random().toString(36).substr(2, 9).toUpperCase()
+    };
+  }
+
+  // Live Razorpay Penny Drop (Composite Account Validation)
+  try {
+    const payload = {
+      account_number: accountNumber,
+      validation_type: 'optimized',
+      reference_id: 'val_' + Math.random().toString(36).substr(2, 9),
+      fund_account: {
+        account_type: 'bank_account',
+        bank_account: {
+          name: accountName,
+          ifsc: ifscCode,
+          account_number: accountNumber
+        },
+        contact: {
+          name: accountName,
+          type: 'vendor'
+        }
+      }
+    };
+
+    const authHeader = 'Basic ' + Buffer.from(rzpKeyId + ':' + rzpKeySecret).toString('base64');
+    
+    const response = await fetch('https://api.razorpay.com/v1/fund_accounts/validations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error?.description || 'Razorpay bank validation failed.');
+    }
+
+    const registeredName = result.results?.registered_name || result.fund_account?.bank_account?.name || '';
+    const status = result.status;
+
+    if (status === 'failed') {
+      throw new Error(result.failure_reason || 'Penny drop validation rejected by the destination bank.');
+    }
+
+    const evaluation = evaluateNameMatch(accountName, registeredName);
+
+    return {
+      success: true,
+      isMock: false,
+      registeredName: registeredName,
+      score: evaluation.score,
+      matched: evaluation.matched,
+      text: evaluation.text,
+      color: evaluation.color,
+      bankRef: result.id
+    };
+  } catch (error) {
+    throw new Error('Bank verification error: ' + error.message);
+  }
 }
 
 /**

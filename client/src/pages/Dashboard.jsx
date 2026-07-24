@@ -94,6 +94,8 @@ export function Dashboard({ session, onLogout }) {
             });
           });
         }
+      } else {
+        setCoords({ top: 0, height: 0 });
       }
     };
 
@@ -265,8 +267,8 @@ export function Dashboard({ session, onLogout }) {
               className={active === 'Settings' ? 'active' : ''}
               onClick={() => { setActive('Settings'); setMenuOpen(false); }}
               style={{
-                background: active === 'Settings' ? 'var(--nav-active-bg)' : 'transparent',
-                color: active === 'Settings' ? 'var(--nav-active-color)' : 'var(--text-secondary)'
+                background: active === 'Settings' ? 'var(--sidebar-active-bg)' : 'transparent',
+                color: active === 'Settings' ? 'var(--green)' : 'var(--text-secondary)'
               }}
             >
               <Settings size={19} />Settings

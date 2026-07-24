@@ -186,6 +186,14 @@ export const updateOrganizationSettings = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST / Verify Bank Account details
+ */
+export const verifyBankAccount = asyncHandler(async (req, res) => {
+  const result = await tenantService.verifyBankAccount(req.tenant, req.body);
+  res.json(result);
+});
+
+/**
  * GET / Get Settlement Analytics & History
  */
 export const getSettlementAnalytics = asyncHandler(async (req, res) => {

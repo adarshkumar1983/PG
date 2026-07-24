@@ -70,6 +70,8 @@ router.route('/organization')
   .get(authorize(permissions.MANAGE_PG), tenantController.getOrganizationSettings)
   .put(authorize(permissions.MANAGE_PG), tenantController.updateOrganizationSettings);
 
+router.post('/organization/verify-bank', authorize(permissions.MANAGE_PG), tenantController.verifyBankAccount);
+
 router.get('/settlements/analytics', authorizePaymentsRead, tenantController.getSettlementAnalytics);
 router.get('/notifications', authorizePaymentsRead, tenantController.getNotifications);
 router.put('/notifications/:id/read', authorizePaymentsRead, tenantController.markNotificationRead);
