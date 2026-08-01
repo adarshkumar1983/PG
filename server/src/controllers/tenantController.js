@@ -205,7 +205,7 @@ export const getSettlementAnalytics = asyncHandler(async (req, res) => {
  * GET / Get Notifications
  */
 export const getNotifications = asyncHandler(async (req, res) => {
-  const notifications = await tenantService.getNotifications(req.tenant);
+  const notifications = await tenantService.getNotifications(req.tenant, req.auth);
   res.json(notifications);
 });
 

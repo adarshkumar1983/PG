@@ -1906,8 +1906,20 @@ export async function getSettlementAnalytics(tenant) {
 /**
  * GET Notifications
  */
-export async function getNotifications(tenant) {
+export async function getNotifications(tenant, auth) {
   if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    if (tenant.role === 'resident') {
+      return [
+        {
+          _id: 'n1',
+          title: 'Rent Receipt Issued',
+          message: 'Your rent payment receipt has been issued and verified.',
+          type: 'payment',
+          read: false,
+          createdAt: new Date().toISOString()
+        }
+      ];
+    }
     return [
       {
         _id: 'n1',
@@ -1929,7 +1941,18 @@ export async function getNotifications(tenant) {
     ];
   }
 
-  return await Notification.find({ organizationId: tenant.organizationId })
+  const query = { organizationId: tenant.organizationId };
+
+  if (tenant.role === 'resident' && auth?.sub) {
+    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).lean();
+    query.$or = [
+      { userId: new mongoose.Types.ObjectId(auth.sub) },
+      { 'data.residentUserId': auth.sub },
+      ...(resident ? [{ 'data.residentId': resident._id }] : [])
+    ];
+  }
+
+  return await Notification.find(query)
     .sort({ createdAt: -1 })
     .limit(20)
     .lean();
@@ -2010,7 +2033,7 @@ export async function reportOfflinePayment(tenant, auth, paymentId, data) {
     message: `${residentName} reported a payment of ₹${payment.amount} via ${method.toUpperCase()} (Ref: ${referenceNumber}).`,
     type: 'payment',
     read: false,
-    data: { paymentId: payment._id, amount: payment.amount, referenceNumber, residentName }
+    data: { paymentId: payment._id, amount: payment.amount, referenceNumber, residentName, residentUserId: auth.sub, residentId: payment.residentId }
   });
 
   return { success: true, message: 'Offline payment reported successfully for verification.', payment };
