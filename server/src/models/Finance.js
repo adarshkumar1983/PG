@@ -15,6 +15,8 @@ const paymentSchema = new mongoose.Schema({
   residentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Resident', required: true },
   invoiceMonth: { type: String, required: true },
   purpose: { type: String, enum: ['rent', 'security_deposit', 'electricity', 'water', 'maintenance', 'fine', 'other'], default: 'rent', required: true },
+  billingType: { type: String, enum: ['monthly', 'daily'], default: 'monthly' },
+  stayPeriod: { startDate: Date, endDate: Date, totalDays: Number },
   amount: { type: Number, required: true, min: 0 },
   receivedAmount: { type: Number, default: 0, min: 0 },
   lateFee: { type: Number, default: 0 },
@@ -34,7 +36,9 @@ const paymentSchema = new mongoose.Schema({
   status: { type: String, enum: ['due', 'pending', 'paid', 'partially_paid', 'failed', 'refunded'], default: 'due' },
   paidAt: Date,
   referenceNumber: String,
+  reportedAmount: Number,
   notes: String,
+  screenshot: String,
   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   transactions: [transactionSchema],
   history: [{

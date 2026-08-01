@@ -11,7 +11,10 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '' });
+  const [form, setForm] = useState({ 
+    name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '',
+    stayType: 'monthly', dailyRate: '', checkInDate: '', checkOutDate: ''
+  });
   const [toast, setToast] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('all');
@@ -86,6 +89,11 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     setPaymentRef('');
     setPaymentNotes('');
 
+    const today = new Date().toISOString().slice(0, 10);
+    const threeDaysLater = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    const bedObj = room?.beds?.find(b => b._id === bedId);
+    const defaultDailyRate = bedObj?.dailyRent || (bedObj?.monthlyRent ? Math.round(bedObj.monthlyRent / 30) : 400);
+
     setForm({
       name: '',
       email: '',
@@ -93,7 +101,11 @@ export function MembersPage({ session, properties = [], onRefresh }) {
       role: 'staff',
       propertyId: propId,
       roomId: roomId,
-      bedId: bedId
+      bedId: bedId,
+      stayType: 'monthly',
+      dailyRate: String(defaultDailyRate),
+      checkInDate: today,
+      checkOutDate: threeDaysLater
     });
   };
 
@@ -494,6 +506,139 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                     }
                   </select>
                 </label>
+
+                <div style={{ marginTop: '14px', marginBottom: '14px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Stay Type</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(f => ({ ...f, stayType: 'monthly' }));
+                        const prop = properties.find(p => p._id === form.propertyId);
+                        const room = prop?.rooms?.find(r => r._id === form.roomId);
+                        const bed = room?.beds?.find(b => b._id === form.bedId);
+                        if (recordInitialPayment && bed) setPaymentAmount(String(bed.monthlyRent));
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: form.stayType === 'monthly' ? '2px solid var(--green)' : '1px solid var(--border)',
+                        background: form.stayType === 'monthly' ? 'var(--mint)' : 'var(--card-bg)',
+                        color: form.stayType === 'monthly' ? 'var(--green)' : 'var(--text-primary)',
+                        fontWeight: '600',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      Monthly Stay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(f => ({ ...f, stayType: 'daily' }));
+                        if (recordInitialPayment) {
+                          const ms = new Date(form.checkOutDate) - new Date(form.checkInDate);
+                          const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+                          setPaymentAmount(String((Number(form.dailyRate) || 400) * days));
+                        }
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: form.stayType === 'daily' ? '2px solid var(--green)' : '1px solid var(--border)',
+                        background: form.stayType === 'daily' ? 'var(--mint)' : 'var(--card-bg)',
+                        color: form.stayType === 'daily' ? 'var(--green)' : 'var(--text-primary)',
+                        fontWeight: '600',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      Per-Day (Daily) Stay
+                    </button>
+                  </div>
+                </div>
+
+                {form.stayType === 'daily' && (
+                  <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div className="form-row">
+                      <label style={{ margin: 0 }}>Check-in Date *
+                        <input
+                          type="date"
+                          value={form.checkInDate}
+                          onChange={e => {
+                            const newIn = e.target.value;
+                            setForm(f => {
+                              const updated = { ...f, checkInDate: newIn };
+                              if (recordInitialPayment && updated.checkOutDate) {
+                                const ms = new Date(updated.checkOutDate) - new Date(newIn);
+                                const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+                                setPaymentAmount(String((Number(updated.dailyRate) || 400) * days));
+                              }
+                              return updated;
+                            });
+                          }}
+                          required={form.stayType === 'daily'}
+                        />
+                      </label>
+                      <label style={{ margin: 0 }}>Check-out Date *
+                        <input
+                          type="date"
+                          value={form.checkOutDate}
+                          onChange={e => {
+                            const newOut = e.target.value;
+                            setForm(f => {
+                              const updated = { ...f, checkOutDate: newOut };
+                              if (recordInitialPayment && updated.checkInDate) {
+                                const ms = new Date(newOut) - new Date(updated.checkInDate);
+                                const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+                                setPaymentAmount(String((Number(updated.dailyRate) || 400) * days));
+                              }
+                              return updated;
+                            });
+                          }}
+                          required={form.stayType === 'daily'}
+                        />
+                      </label>
+                    </div>
+                    <div className="form-row">
+                      <label style={{ margin: 0 }}>Daily Rate (₹/day) *
+                        <input
+                          type="number"
+                          min="0"
+                          value={form.dailyRate}
+                          onChange={e => {
+                            const newRate = e.target.value;
+                            setForm(f => {
+                              const updated = { ...f, dailyRate: newRate };
+                              if (recordInitialPayment && updated.checkInDate && updated.checkOutDate) {
+                                const ms = new Date(updated.checkOutDate) - new Date(updated.checkInDate);
+                                const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+                                setPaymentAmount(String((Number(newRate) || 0) * days));
+                              }
+                              return updated;
+                            });
+                          }}
+                          placeholder="e.g. 500"
+                          required={form.stayType === 'daily'}
+                        />
+                      </label>
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Calculated Total Rent</span>
+                        <b style={{ fontSize: '14px', color: 'var(--green)' }}>
+                          {(() => {
+                            if (!form.checkInDate || !form.checkOutDate) return '₹0';
+                            const ms = new Date(form.checkOutDate) - new Date(form.checkInDate);
+                            const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+                            const total = days * (Number(form.dailyRate) || 0);
+                            return `₹${total} (${days} ${days === 1 ? 'day' : 'days'})`;
+                          })()}
+                        </b>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', margin: '4px 0 0 0' }}>

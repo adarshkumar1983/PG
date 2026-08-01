@@ -82,9 +82,9 @@ export function getJaroWinklerSimilarity(s1, s2) {
  */
 export function evaluateNameMatch(s1, s2) {
   if (!s1 || !s2) return { score: 0, text: 'No details', color: 'gray', matched: false };
-  
+
   const score = Math.round(getJaroWinklerSimilarity(s1, s2) * 100);
-  
+
   if (score >= 85) {
     return { score, text: 'Verified Match', color: '#10b981', matched: true };
   } else if (score >= 60) {

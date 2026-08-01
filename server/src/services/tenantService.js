@@ -15,6 +15,30 @@ import { Notification } from '../models/Notification.js';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 
+export function formatInvoicePeriodHelper(p) {
+  if (!p) return '';
+  if (p.stayPeriod && p.stayPeriod.startDate && p.stayPeriod.endDate) {
+    const start = new Date(p.stayPeriod.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const end = new Date(p.stayPeriod.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `Daily Stay (${start} - ${end})`;
+  }
+  const monthStr = p.invoiceMonth || '';
+  if (p.billingType === 'daily' || monthStr.includes('-DAILY-') || monthStr.includes('DAILY')) {
+    const ym = monthStr.match(/^(\d{4})-(\d{2})/);
+    if (ym) {
+      const d = new Date(Number(ym[1]), Number(ym[2]) - 1, 1);
+      return `Daily Stay (${d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })})`;
+    }
+    return 'Daily Stay';
+  }
+  const m = monthStr.match(/^(\d{4})-(\d{2})$/);
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  }
+  return monthStr.split('-DAILY-')[0] || monthStr;
+}
+
 export const isDbConnected = () => mongoose.connection.readyState === 1;
 
 /**
@@ -161,9 +185,13 @@ export async function getDashboard(tenant, auth) {
       if (p.status === 'due') status = 'Overdue';
       else if (p.status === 'pending') status = 'Due soon';
 
+      if (p.referenceNumber && p.status !== 'paid') {
+        status = 'Pending Verification';
+      }
+
       const dateStr = p.status === 'paid' && p.paidAt 
         ? `Paid ${new Date(p.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-        : `Due for ${p.invoiceMonth}`;
+        : `Due for ${formatInvoicePeriodHelper(p)}`;
 
       return {
         _id: p._id,
@@ -174,7 +202,9 @@ export async function getDashboard(tenant, auth) {
         rawStatus: p.status,
         date: dateStr,
         initials: user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U',
-        color: '#17644f'
+        color: '#17644f',
+        referenceNumber: p.referenceNumber,
+        method: p.method
       };
     });
 
@@ -204,6 +234,8 @@ export async function getDashboard(tenant, auth) {
       role: 'resident',
       upiId: org?.upiId || '',
       bankDetails: org?.bankDetails || null,
+      directSettlementEnabled: org ? org.directSettlementEnabled !== false : true,
+      onlineGatewayEnabled: org ? org.onlineGatewayEnabled !== false : true,
       residentDetails: {
         propertyName: prop?.name || 'N/A',
         address: prop?.address || 'N/A',
@@ -263,7 +295,7 @@ export async function getDashboard(tenant, auth) {
     
     const dateStr = p.status === 'paid' && p.paidAt 
       ? `Paid ${new Date(p.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-      : `Due for ${p.invoiceMonth}`;
+      : `Due for ${formatInvoicePeriodHelper(p)}`;
 
     let roomLabel = 'General';
     if (p.residentId) {
@@ -512,6 +544,18 @@ export async function createMember(tenant, data) {
   const membership = await Membership.create({ organizationId: tenant.organizationId, userId: user.id, role, status: 'invited' });
 
   if (role === 'resident' && propertyId) {
+    const isDaily = data.stayType === 'daily';
+    const checkIn = data.checkInDate ? new Date(data.checkInDate) : new Date();
+    const checkOut = data.checkOutDate ? new Date(data.checkOutDate) : undefined;
+    
+    let computedDays = 1;
+    if (isDaily && checkIn && checkOut) {
+      const ms = checkOut.getTime() - checkIn.getTime();
+      computedDays = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+    } else if (data.totalDays) {
+      computedDays = Number(data.totalDays);
+    }
+
     const resident = await Resident.create({
       organizationId: tenant.organizationId,
       propertyId,
@@ -521,7 +565,11 @@ export async function createMember(tenant, data) {
       name: user.name,
       mobile: user.mobile,
       email: user.email,
-      checkInDate: new Date(),
+      checkInDate: checkIn,
+      stayType: isDaily ? 'daily' : 'monthly',
+      dailyRate: isDaily ? Number(data.dailyRate || 0) : undefined,
+      expectedCheckOutDate: isDaily ? checkOut : undefined,
+      totalDays: isDaily ? computedDays : undefined,
       status: 'active'
     });
     
@@ -535,20 +583,35 @@ export async function createMember(tenant, data) {
         if (roomDoc) {
           const bedDoc = roomDoc.beds.id(bedId);
           if (bedDoc) {
-            rentAmount = bedDoc.monthlyRent;
+            if (isDaily) {
+              const rate = Number(data.dailyRate) || bedDoc.dailyRent || Math.round(bedDoc.monthlyRent / 30);
+              rentAmount = rate * computedDays;
+              resident.dailyRate = rate;
+              await resident.save();
+            } else {
+              rentAmount = bedDoc.monthlyRent;
+            }
           }
         }
       }
+    } else if (isDaily) {
+      const rate = Number(data.dailyRate) || 500;
+      rentAmount = rate * computedDays;
+      resident.dailyRate = rate;
+      await resident.save();
     }
 
     const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const invoiceMonthStr = isDaily ? `${currentMonthStr}-DAILY-${resident._id}` : currentMonthStr;
 
     // Auto raise first rent invoice for the resident
     const paymentRecord = new Payment({
       organizationId: tenant.organizationId,
       propertyId,
       residentId: resident._id,
-      invoiceMonth: currentMonthStr,
+      invoiceMonth: invoiceMonthStr,
+      billingType: isDaily ? 'daily' : 'monthly',
+      stayPeriod: isDaily ? { startDate: checkIn, endDate: checkOut, totalDays: computedDays } : undefined,
       purpose: 'rent',
       amount: rentAmount,
       receivedAmount: 0,
@@ -1243,6 +1306,9 @@ export async function initiateCharge(tenant, auth, paymentId) {
 
   // Fetch organization profile to get linkedAccountId
   const org = await Organization.findById(tenant.organizationId).lean();
+  if (org && org.onlineGatewayEnabled === false) {
+    throw new Error('Instant online checkout is currently disabled by the property owner.');
+  }
 
   // Always use the Platform's global keys from .env
   const rzpKeyId = process.env.RAZORPAY_KEY_ID;
@@ -1393,6 +1459,8 @@ export async function getOrganizationSettings(tenant) {
       slug: 'greenview-residency-demo',
       linkedAccountId: 'acc_demo123456789',
       upiId: 'owner@okaxis',
+      directSettlementEnabled: true,
+      onlineGatewayEnabled: true,
       bankDetails: {
         accountName: 'StayZen Realty Demo',
         accountNumber: '1234567890',
@@ -1414,6 +1482,8 @@ export async function getOrganizationSettings(tenant) {
     slug: org.slug,
     linkedAccountId: org.gateway?.linkedAccountId || '',
     upiId: org.upiId || '',
+    directSettlementEnabled: org.directSettlementEnabled !== false,
+    onlineGatewayEnabled: org.onlineGatewayEnabled !== false,
     bankDetails: org.bankDetails || {
       accountName: '',
       accountNumber: '',
@@ -1460,9 +1530,18 @@ export async function updateOrganizationSettings(tenant, data) {
     }
   }
 
+  if (data.linkedAccountId) {
+    const linkedAccRegex = /^acc_[a-zA-Z0-9]{14}$/;
+    if (!linkedAccRegex.test(data.linkedAccountId)) {
+      throw new Error('Invalid Razorpay Linked Account ID. Must start with "acc_" followed by exactly 14 characters (18 characters total).');
+    }
+  }
+
   // Update fields
   if (data.name) org.name = data.name;
   if (data.upiId !== undefined) org.upiId = data.upiId;
+  if (data.directSettlementEnabled !== undefined) org.directSettlementEnabled = data.directSettlementEnabled;
+  if (data.onlineGatewayEnabled !== undefined) org.onlineGatewayEnabled = data.onlineGatewayEnabled;
   
   if (data.linkedAccountId !== undefined) {
     org.gateway = {
@@ -1490,7 +1569,7 @@ export async function updateOrganizationSettings(tenant, data) {
     action: 'update',
     entityType: 'Organization',
     entityId: org._id,
-    details: { name: org.name, upiId: org.upiId, linkedAccountId: data.linkedAccountId }
+    details: { name: org.name, upiId: org.upiId, linkedAccountId: data.linkedAccountId, directSettlementEnabled: org.directSettlementEnabled, onlineGatewayEnabled: org.onlineGatewayEnabled }
   });
 
   return {
@@ -1499,6 +1578,8 @@ export async function updateOrganizationSettings(tenant, data) {
     slug: org.slug,
     linkedAccountId: org.gateway?.linkedAccountId || '',
     upiId: org.upiId || '',
+    directSettlementEnabled: org.directSettlementEnabled !== false,
+    onlineGatewayEnabled: org.onlineGatewayEnabled !== false,
     bankDetails: org.bankDetails
   };
 }
@@ -1867,4 +1948,164 @@ export async function markNotificationRead(tenant, notificationId) {
   );
   return { success: true };
 }
+
+/**
+ * Report offline payment (UPI QR / Bank Transfer)
+ */
+export async function reportOfflinePayment(tenant, auth, paymentId, data) {
+  const { method, referenceNumber, notes, screenshot, amount } = data;
+  if (!method || !referenceNumber) {
+    throw new Error('Payment method and transaction reference number are required.');
+  }
+
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    const payment = mockStore.reportMockOfflinePayment(paymentId, data);
+    return { success: true, message: 'Offline payment reported successfully (Demo Mode).', payment };
+  }
+
+  // Find payment and verify it belongs to this organization
+  const payment = await Payment.findOne({ _id: paymentId, organizationId: tenant.organizationId });
+  if (!payment) {
+    throw new Error('Payment invoice not found.');
+  }
+
+  // Ensure the resident is the one who owns this payment or caller is staff/owner
+  const user = await User.findById(auth.sub).lean();
+  let residentName = user?.name || 'Resident';
+  if (tenant.role === 'resident') {
+    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).lean();
+    if (!resident || resident._id.toString() !== payment.residentId.toString()) {
+      throw new Error('You are not authorized to report payment for this resident.');
+    }
+    residentName = resident.name;
+  }
+
+  if (payment.status === 'paid') {
+    throw new Error('This invoice has already been fully paid.');
+  }
+
+  payment.status = 'pending'; // Mark as pending verification
+  payment.method = method;
+  payment.referenceNumber = referenceNumber;
+  payment.reportedAmount = amount !== undefined ? Number(amount) : payment.amount;
+  payment.notes = notes || '';
+  if (screenshot) {
+    payment.screenshot = screenshot;
+  }
+  
+  if (!payment.history) payment.history = [];
+  payment.history.push({
+    action: 'offline_payment_reported',
+    performedBy: auth.sub,
+    timestamp: new Date(),
+    details: { method, referenceNumber, notes }
+  });
+
+  await payment.save();
+
+  // Create notification for the organization owners/staff
+  await Notification.create({
+    organizationId: tenant.organizationId,
+    title: 'Offline Payment Reported',
+    message: `${residentName} reported a payment of ₹${payment.amount} via ${method.toUpperCase()} (Ref: ${referenceNumber}).`,
+    type: 'payment',
+    read: false,
+    data: { paymentId: payment._id, amount: payment.amount, referenceNumber, residentName }
+  });
+
+  return { success: true, message: 'Offline payment reported successfully for verification.', payment };
+}
+
+/**
+ * Approve reported offline payment
+ */
+export async function approveOfflinePayment(tenant, auth, paymentId) {
+  if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
+    const payment = mockStore.approveMockOfflinePayment(paymentId, auth.sub);
+    return { success: true, message: 'Offline payment approved successfully (Demo Mode).', payment };
+  }
+
+  const payment = await Payment.findOne({ _id: paymentId, organizationId: tenant.organizationId })
+    .populate('residentId', 'name email');
+  if (!payment) {
+    throw new Error('Payment record not found.');
+  }
+
+  if (payment.status === 'paid') {
+    throw new Error('Payment is already marked as paid.');
+  }
+
+  // Calculate approval amount based on what resident reported
+  const currentReceived = payment.receivedAmount || 0;
+  const approveAmount = payment.reportedAmount !== undefined ? payment.reportedAmount : (payment.amount - currentReceived);
+  const totalReceived = currentReceived + approveAmount;
+  
+  payment.receivedAmount = Math.min(totalReceived, payment.amount);
+  payment.status = payment.receivedAmount >= payment.amount ? 'paid' : 'partially_paid';
+  payment.paidAt = new Date();
+  payment.method = payment.method || 'upi';
+  payment.referenceNumber = payment.referenceNumber || 'DIRECT_APPROVE';
+  
+  if (!payment.transactions) payment.transactions = [];
+  payment.transactions.push({
+    amount: approveAmount,
+    paidAt: new Date(),
+    method: payment.method || 'upi',
+    referenceNumber: payment.referenceNumber || 'DIRECT_APPROVE',
+    notes: payment.notes || 'Offline payment verified and approved.',
+    recordedBy: auth.sub
+  });
+
+  if (!payment.history) payment.history = [];
+  payment.history.push({
+    action: 'offline_payment_approved',
+    performedBy: auth.sub,
+    timestamp: new Date(),
+    details: { amount: approveAmount }
+  });
+
+  await payment.save();
+
+  // Fetch organization profile to get name for email
+  const org = await Organization.findById(tenant.organizationId).lean();
+  const organizationName = org ? org.name : 'StayZen Residency';
+
+  // Send email confirmation receipt to resident
+  if (payment.residentId && payment.residentId.email) {
+    try {
+      const { sendReceiptEmail } = await import('../utils/mailer.js');
+      await sendReceiptEmail(payment.residentId.email, payment.residentId.name, {
+        amount: approveAmount,
+        purpose: payment.purpose,
+        invoiceMonth: payment.invoiceMonth,
+        method: payment.method,
+        referenceNumber: payment.referenceNumber,
+        paidAt: payment.paidAt,
+        organizationName
+      });
+    } catch (mailErr) {
+      console.error('[SMTP ERROR] Failed to send payment receipt email:', mailErr);
+    }
+  }
+
+  // Add audit log
+  await AuditLog.create({
+    organizationId: tenant.organizationId,
+    performedBy: auth.sub,
+    action: 'record_payment',
+    entityType: 'Payment',
+    entityId: payment._id,
+    details: {
+      amount: approveAmount,
+      purpose: payment.purpose,
+      invoiceMonth: payment.invoiceMonth,
+      method: payment.method || 'upi',
+      residentName: payment.residentId?.name || 'Resident',
+      newValue: { status: payment.status, receivedAmount: payment.receivedAmount }
+    }
+  });
+
+  return { success: true, message: 'Payment successfully approved and recorded in ledger.', payment };
+}
+
 

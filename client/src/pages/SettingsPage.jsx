@@ -42,6 +42,8 @@ export default function SettingsPage({ session }) {
     name: '',
     upiId: '',
     linkedAccountId: '',
+    directSettlementEnabled: true,
+    onlineGatewayEnabled: true,
     bankDetails: {
       accountName: '',
       accountNumber: '',
@@ -80,6 +82,8 @@ export default function SettingsPage({ session }) {
           name: data.name || '',
           upiId: data.upiId || '',
           linkedAccountId: data.linkedAccountId || '',
+          directSettlementEnabled: data.directSettlementEnabled !== false,
+          onlineGatewayEnabled: data.onlineGatewayEnabled !== false,
           bankDetails: data.bankDetails || {
             accountName: '',
             accountNumber: '',
@@ -227,6 +231,14 @@ export default function SettingsPage({ session }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (form.linkedAccountId) {
+      const linkedAccRegex = /^acc_[a-zA-Z0-9]{14}$/;
+      if (!linkedAccRegex.test(form.linkedAccountId)) {
+        showMsg('danger', 'Invalid Razorpay Linked Account ID. Must start with "acc_" followed by exactly 14 characters (18 characters total).');
+        return;
+      }
+    }
+
     if (form.bankDetails.accountNumber !== confirmAccountNumber) {
       showMsg('danger', 'Account Number and Confirmation Account Number must match.');
       return;
@@ -610,6 +622,67 @@ export default function SettingsPage({ session }) {
           {activeTab === 'settlement' && (
             <div key="settlement" className="fade-in-up">
               <div className="settings-card">
+                <div style={{ display: 'grid', gap: '16px', marginBottom: '28px', background: 'var(--table-head-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>Payment Options Configuration</h4>
+                  <p style={{ margin: '0 0 16px', fontSize: '11px', color: 'var(--text-secondary)' }}>Toggle which payment channels are visible to your PG renters during checkout.</p>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-primary)' }}>Direct Settlement (UPI / Bank Transfer)</strong>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Allow renters to pay directly to your bank account or scan your UPI QR code.</span>
+                    </div>
+                    <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.directSettlementEnabled !== false}
+                        onChange={e => setForm(prev => ({ ...prev, directSettlementEnabled: e.target.checked }))}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span className="slider" style={{
+                        position: 'absolute', cursor: 'pointer', inset: 0,
+                        backgroundColor: (form.directSettlementEnabled !== false) ? 'var(--green)' : '#ccc',
+                        transition: '.2s', borderRadius: '24px',
+                        display: 'flex', alignItems: 'center'
+                      }}>
+                        <span style={{
+                          height: '18px', width: '18px', left: (form.directSettlementEnabled !== false) ? '24px' : '4px',
+                          bottom: '3px', backgroundColor: 'white', transition: '.2s', borderRadius: '50%',
+                          position: 'absolute'
+                        }} />
+                      </span>
+                    </label>
+                  </div>
+
+                  <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-primary)' }}>Instant Online Gateway (Razorpay)</strong>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Allow renters to pay instantly online using Cards, Netbanking, or digital wallets.</span>
+                    </div>
+                    <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.onlineGatewayEnabled !== false}
+                        onChange={e => setForm(prev => ({ ...prev, onlineGatewayEnabled: e.target.checked }))}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span className="slider" style={{
+                        position: 'absolute', cursor: 'pointer', inset: 0,
+                        backgroundColor: (form.onlineGatewayEnabled !== false) ? 'var(--green)' : '#ccc',
+                        transition: '.2s', borderRadius: '24px',
+                        display: 'flex', alignItems: 'center'
+                      }}>
+                        <span style={{
+                          height: '18px', width: '18px', left: (form.onlineGatewayEnabled !== false) ? '24px' : '4px',
+                          bottom: '3px', backgroundColor: 'white', transition: '.2s', borderRadius: '50%',
+                          position: 'absolute'
+                        }} />
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
                   <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#edf4f1', color: 'var(--green)', display: 'grid', placeItems: 'center' }}>
                     <Landmark size={20} />
@@ -636,6 +709,44 @@ export default function SettingsPage({ session }) {
                       Allows residents to trigger instant UPI transactions on mobile client dashboards.
                     </span>
                   </label>
+
+                  {form.upiId && (
+                    <div className="upi-qr-preview-card" style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      background: 'var(--table-head-bg)',
+                      border: '1.5px dashed var(--border)',
+                      borderRadius: '16px',
+                      padding: '24px',
+                      marginTop: '4px',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>Direct UPI QR Code Preview</h4>
+                      <p style={{ margin: '0 0 16px', fontSize: '11px', color: 'var(--text-secondary)' }}>This is how the base QR code will look. Renters will see a version populated with the exact rent amount due.</p>
+                      
+                      <div style={{
+                        background: '#ffffff',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
+                        display: 'inline-block'
+                      }}>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${form.upiId}&pn=${form.name || 'StayZen PG'}&cu=INR`)}`}
+                          alt="UPI QR Code Preview"
+                          style={{ display: 'block', width: '180px', height: '180px' }}
+                        />
+                      </div>
+                      
+                      <div style={{ marginTop: '14px', fontSize: '13px', fontWeight: '600', color: 'var(--green)' }}>
+                        {form.upiId}
+                      </div>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Payee Name: {form.name || 'StayZen PG'}
+                      </span>
+                    </div>
+                  )}
 
                   <hr style={{ border: 0, borderTop: '1.5px solid var(--border)', margin: '4px 0' }} />
 
@@ -916,7 +1027,7 @@ export default function SettingsPage({ session }) {
                     className="styled-input"
                     value={form.linkedAccountId}
                     onChange={e => setForm(prev => ({ ...prev, linkedAccountId: e.target.value.trim() }))}
-                    placeholder="e.g. acc_Fv8a2H18kls7y"
+                    placeholder="e.g. acc_Fv8a2H18kls7ya"
                   />
                   <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', lineHeight: '1.4', display: 'block', fontWeight: '500' }}>
                     Generate or copy this ID from **Route / Partner Accounts** tab in your Razorpay Dashboard.

@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { Organization } from '../models/Organization.js';
 import { Membership } from '../models/Membership.js';
 import * as mockStore from '../mockStore.js';
+import { sendResetPasswordEmail } from '../utils/mailer.js';
 
 const router = Router();
 const accessSecret = () => process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
@@ -67,6 +68,68 @@ router.post('/accept-invite', async (req, res) => {
     res.json({ message: 'Account activated successfully! You can now sign in.' });
   } catch (err) {
     return res.status(400).json({ message: 'Invalid or expired invitation token.' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email address is required.' });
+
+  try {
+    if (!isDbConnected()) {
+      if (email.toLowerCase() === 'owner@stayzen.demo') {
+        const token = jwt.sign({ sub: 'demo-owner', email: email.toLowerCase(), type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
+        const resetLink = `http://localhost:5173/?resetToken=${token}`;
+        await sendResetPasswordEmail(email.toLowerCase(), 'Adarsh Kumar', resetLink);
+        return res.json({ message: 'Simulated password reset email sent successfully! Please check sent_emails/ folder.' });
+      }
+      return res.status(404).json({ message: 'Email not found in demo mode.' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ message: 'No user registered with this email address.' });
+    }
+
+    const token = jwt.sign({ sub: user.id, email: user.email, type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
+    const resetLink = `http://localhost:5173/?resetToken=${token}`;
+    await sendResetPasswordEmail(user.email, user.name, resetLink);
+
+    res.json({ message: 'Password reset link sent successfully.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ message: 'An error occurred while processing your request.' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ message: 'Token and password are required.' });
+  if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+
+  try {
+    const payload = jwt.verify(token, accessSecret());
+    if (payload.type !== 'reset-password') {
+      return res.status(400).json({ message: 'Invalid reset token type.' });
+    }
+
+    if (!isDbConnected()) {
+      if (payload.sub === 'demo-owner') {
+        return res.json({ message: 'Password has been reset successfully (Demo mode).' });
+      }
+      return res.status(400).json({ message: 'Invalid reset token sub in demo mode.' });
+    }
+
+    const user = await User.findById(payload.sub);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    await user.setPassword(password);
+    await user.save();
+
+    res.json({ message: 'Password has been reset successfully. You can now log in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(400).json({ message: 'Invalid or expired reset token.' });
   }
 });
 

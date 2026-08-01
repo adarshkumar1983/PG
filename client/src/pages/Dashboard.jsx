@@ -19,6 +19,7 @@ import ReportsPage from './ReportsPage.jsx';
 import MaintenancePage from './MaintenancePage.jsx';
 import SettingsPage from './SettingsPage.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
+import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
@@ -48,6 +49,8 @@ export function Dashboard({ session, onLogout }) {
   const [modal, setModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentStatusText, setPaymentStatusText] = useState('');
+  const [showResidentPayModal, setShowResidentPayModal] = useState(false);
+  const [paymentForResidentModal, setPaymentForResidentModal] = useState(null);
 
   const handlePayOnline = (paymentId, amount, label) => {
     import('../utils/razorpay.js').then(({ processOnlinePayment }) => {
@@ -369,6 +372,10 @@ export function Dashboard({ session, onLogout }) {
               properties={properties}
               members={members}
               userRole={data.role}
+              upiId={data.upiId}
+              bankDetails={data.bankDetails}
+              directSettlementEnabled={data.directSettlementEnabled}
+              onlineGatewayEnabled={data.onlineGatewayEnabled}
               onRefresh={refreshDashboardData}
             />
           ) : active === 'Expenses' ? (
@@ -472,30 +479,57 @@ export function Dashboard({ session, onLogout }) {
                     </div>
                     {pendingInvoice && (
                       <div style={{ padding: '0 28px 24px 28px', marginTop: '-10px' }}>
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={() => handlePayOnline(pendingInvoice._id, pendingInvoice.amount, pendingInvoice.date)}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            backgroundColor: 'var(--green)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            gap: '8px',
-                            transition: 'opacity 0.2s'
-                          }}
-                          onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
-                          onMouseOut={e => e.currentTarget.style.opacity = '1'}
-                        >
-                          Pay Rent Online ({money(data.stats.pending)})
-                        </button>
+                        {pendingInvoice.referenceNumber ? (
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              backgroundColor: 'var(--border)',
+                              color: 'var(--text-secondary)',
+                              border: 'none',
+                              borderRadius: '8px',
+                              fontWeight: '600',
+                              cursor: 'not-allowed',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                          >
+                            Verification Pending ({money(data.stats.pending)})
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => {
+                              setPaymentForResidentModal(pendingInvoice);
+                              setShowResidentPayModal(true);
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              backgroundColor: 'var(--green)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '8px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              gap: '8px',
+                              transition: 'opacity 0.2s'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
+                            onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                          >
+                            Pay Rent Online ({money(data.stats.pending)})
+                          </button>
+                        )}
                       </div>
                     )}
                   </section>
@@ -513,7 +547,7 @@ export function Dashboard({ session, onLogout }) {
                     </div>
                   </section>
 
-                  {((data.upiId) || (data.bankDetails && data.bankDetails.accountNumber)) && (
+                  {data.directSettlementEnabled !== false && ((data.upiId) || (data.bankDetails && data.bankDetails.accountNumber)) && (
                     <section className="card">
                       <div className="card-head">
                         <div>
@@ -523,9 +557,26 @@ export function Dashboard({ session, onLogout }) {
                       </div>
                       <div style={{ padding: '20px', fontSize: '13px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
                         {data.upiId && (
-                          <div style={{ marginBottom: '14px' }}>
-                            <span style={{ display: 'block', fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>UPI ID</span>
-                            <code style={{ background: 'var(--table-head-bg)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{data.upiId}</code>
+                          <div style={{ marginBottom: '16px', display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <div style={{ flex: '1', minWidth: '150px' }}>
+                              <span style={{ display: 'block', fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '4px' }}>UPI ID</span>
+                              <code style={{ background: 'var(--table-head-bg)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block', fontFamily: 'monospace', color: 'var(--text-primary)', fontSize: '12px' }}>{data.upiId}</code>
+                              <p style={{ margin: '8px 0 0', fontSize: '11px', color: 'var(--text-secondary)' }}>Scan this QR code with GPay, PhonePe, or Paytm to pay directly.</p>
+                            </div>
+                            <div style={{
+                              background: '#ffffff',
+                              padding: '8px',
+                              borderRadius: '12px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                              border: '1px solid var(--border)',
+                              display: 'inline-block'
+                            }}>
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`upi://pay?pa=${data.upiId}&pn=${encodeURIComponent(data.property || 'StayZen PG')}&am=${data.stats.pending > 0 ? data.stats.pending : ''}&cu=INR`)}`}
+                                alt="UPI QR Code"
+                                style={{ display: 'block', width: '120px', height: '120px' }}
+                              />
+                            </div>
                           </div>
                         )}
                         {data.bankDetails && data.bankDetails.accountNumber && (
@@ -595,7 +646,7 @@ export function Dashboard({ session, onLogout }) {
                   {data.role !== 'resident' && <button className="text-button">View all payments <ChevronRight size={16} /></button>}
                 </div>
                 <div className="table">
-                  <div className="tr table-head">
+                  <div className="tr table-head" style={data.role === 'resident' ? { gridTemplateColumns: '2fr .8fr .8fr 1fr 140px' } : {}}>
                     <span>{data.role === 'resident' ? 'Recipient' : 'Resident'}</span>
                     <span>Amount</span>
                     <span>Status</span>
@@ -603,7 +654,7 @@ export function Dashboard({ session, onLogout }) {
                     <span />
                   </div>
                   {data.payments.map(p => (
-                    <div className="tr" key={p.name}>
+                    <div className="tr" key={p.name} style={data.role === 'resident' ? { gridTemplateColumns: '2fr .8fr .8fr 1fr 140px' } : {}}>
                       <span className="resident">
                         <i style={{ background: p.color }}>{p.initials}</i>
                         <span>
@@ -615,23 +666,50 @@ export function Dashboard({ session, onLogout }) {
                       <span><i className={`pill ${p.status.toLowerCase().replace(' ', '-')}`}>{p.status}</i></span>
                       <span className="date">{p.date}</span>
                       {data.role === 'resident' && p.rawStatus !== 'paid' ? (
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={() => handlePayOnline(p._id, p.amount, p.date)}
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: '12px',
-                            backgroundColor: 'var(--green)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontWeight: '600',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Pay Online
-                        </button>
+                        p.referenceNumber ? (
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: 'var(--border)',
+                              color: 'var(--text-secondary)',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              cursor: 'not-allowed',
+                              whiteSpace: 'nowrap',
+                              justifySelf: 'end'
+                            }}
+                          >
+                            Verification Pending
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => {
+                              setPaymentForResidentModal(p);
+                              setShowResidentPayModal(true);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: 'var(--green)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              justifySelf: 'end'
+                            }}
+                          >
+                            Pay Online
+                          </button>
+                        )
                       ) : (
                         <button className="more"><MoreHorizontal size={18} /></button>
                       )}
@@ -671,6 +749,26 @@ export function Dashboard({ session, onLogout }) {
             </div>
           </form>
         </div>
+      )}
+      {showResidentPayModal && paymentForResidentModal && (
+        <ResidentPaymentModal
+          session={session}
+          payment={paymentForResidentModal}
+          upiId={data.upiId}
+          bankDetails={data.bankDetails}
+          directSettlementEnabled={data.directSettlementEnabled}
+          onlineGatewayEnabled={data.onlineGatewayEnabled}
+          pgName={data.property || "StayZen Residency"}
+          onClose={() => {
+            setShowResidentPayModal(false);
+            setPaymentForResidentModal(null);
+          }}
+          onSuccess={(msg) => {
+            notify(msg);
+            refreshDashboardData();
+          }}
+          handlePayOnline={handlePayOnline}
+        />
       )}
       {toast && <div className="toast">✓ {toast}</div>}
       {paymentLoading && (

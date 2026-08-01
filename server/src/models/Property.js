@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const bedSchema = new mongoose.Schema({
   label: { type: String, required: true },
   monthlyRent: { type: Number, min: 0, required: true },
+  dailyRent: { type: Number, min: 0, default: 0 },
   status: { type: String, enum: ['vacant', 'occupied', 'maintenance'], default: 'vacant' },
   residentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Resident' }
 });

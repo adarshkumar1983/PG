@@ -573,6 +573,7 @@ export default function ResidentsPage({ session, properties = [], members = [], 
       {receiptPayment && (
         <ReceiptModal 
           payment={receiptPayment}
+          properties={properties}
           onClose={() => setReceiptPayment(null)}
           pgName={getResidentRoomDetails(selectedResident).propertyName}
         />

@@ -9,6 +9,10 @@ const residentSchema = new mongoose.Schema({
   checkInDate: { type: Date, required: true }, checkOutDate: Date, agreementEndsAt: Date,
   securityDeposit: { type: Number, min: 0, default: 0 }, roomId: mongoose.Schema.Types.ObjectId,
   bedId: mongoose.Schema.Types.ObjectId,
+  stayType: { type: String, enum: ['monthly', 'daily'], default: 'monthly' },
+  dailyRate: { type: Number, min: 0 },
+  expectedCheckOutDate: Date,
+  totalDays: { type: Number, min: 1 },
   documents: [{ type: { type: String, enum: ['aadhaar', 'pan', 'agreement', 'other'] }, storageKey: String, verified: Boolean }],
   status: { type: String, enum: ['draft', 'active', 'notice_period', 'checked_out'], default: 'draft' }
 }, { timestamps: true });

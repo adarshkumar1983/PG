@@ -15,6 +15,8 @@ const organizationSchema = new mongoose.Schema({
   razorpayKeyId: { type: String, trim: true },
   razorpayKeySecret: { type: String, trim: true, select: false },
   upiId: { type: String, trim: true },
+  directSettlementEnabled: { type: Boolean, default: true },
+  onlineGatewayEnabled: { type: Boolean, default: true },
   bankDetails: {
     accountName: { type: String, trim: true },
     accountNumber: { type: String, trim: true },

@@ -56,6 +56,8 @@ router.route('/payments/:id')
 router.post('/payments/record-cash', authorize(permissions.PAYMENT_WRITE), tenantController.recordCashPayment);
 router.post('/payments/:id/initiate-charge', authorizePaymentsRead, tenantController.initiateCharge);
 router.post('/payments/verify-online-payment', authorizePaymentsRead, tenantController.verifyOnlinePayment);
+router.post('/payments/:id/report-offline', authorizePaymentsRead, tenantController.reportOfflinePayment);
+router.post('/payments/:id/approve-offline', authorize(permissions.PAYMENT_WRITE), tenantController.approveOfflinePayment);
 router.post('/invoices', authorize(permissions.PAYMENT_WRITE), tenantController.createInvoice);
 
 router.route('/expenses')

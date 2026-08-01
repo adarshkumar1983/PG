@@ -1,5 +1,29 @@
 import crypto from 'crypto';
 
+export function formatInvoicePeriodHelper(p) {
+  if (!p) return '';
+  if (p.stayPeriod && p.stayPeriod.startDate && p.stayPeriod.endDate) {
+    const start = new Date(p.stayPeriod.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const end = new Date(p.stayPeriod.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `Daily Stay (${start} - ${end})`;
+  }
+  const monthStr = p.invoiceMonth || '';
+  if (p.billingType === 'daily' || monthStr.includes('-DAILY-') || monthStr.includes('DAILY')) {
+    const ym = monthStr.match(/^(\d{4})-(\d{2})/);
+    if (ym) {
+      const d = new Date(Number(ym[1]), Number(ym[2]) - 1, 1);
+      return `Daily Stay (${d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })})`;
+    }
+    return 'Daily Stay';
+  }
+  const m = monthStr.match(/^(\d{4})-(\d{2})$/);
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  }
+  return monthStr.split('-DAILY-')[0] || monthStr;
+}
+
 export let mockProperties = [
   {
     _id: 'demo-prop-1',
@@ -230,10 +254,15 @@ export const getDashboardStats = () => {
     if (p.status === 'due') status = 'Overdue';
     else if (p.status === 'pending') status = 'Due soon';
     else if (p.status === 'partially_paid') status = 'Partially Paid';
+
+    if (p.referenceNumber && p.status !== 'paid') {
+      status = 'Pending Verification';
+    }
     
+    const periodText = formatInvoicePeriodHelper(p);
     const dateStr = p.status === 'paid' && p.paidAt 
       ? `Paid ${new Date(p.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-      : `Due for ${p.invoiceMonth}`;
+      : `Due for ${periodText}`;
 
     let roomLabel = 'General';
     if (p.residentId) {
@@ -261,7 +290,8 @@ export const getDashboardStats = () => {
       date: dateStr,
       initials,
       color,
-      method: p.method || 'cash'
+      method: p.method || 'cash',
+      referenceNumber: p.referenceNumber
     };
   });
 
@@ -380,6 +410,18 @@ export const addMockMember = (body) => {
 
   if (body.role === 'resident') {
     const resId = `res-${Date.now()}`;
+    const isDaily = body.stayType === 'daily';
+    const checkIn = body.checkInDate || new Date().toISOString().slice(0, 10);
+    const checkOut = body.checkOutDate || (isDaily ? new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) : undefined);
+    
+    let totalDays = 1;
+    if (isDaily && checkIn && checkOut) {
+      const ms = new Date(checkOut) - new Date(checkIn);
+      totalDays = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+    } else if (body.totalDays) {
+      totalDays = Number(body.totalDays);
+    }
+
     const newRes = {
       _id: resId,
       name: body.name,
@@ -388,7 +430,11 @@ export const addMockMember = (body) => {
       propertyId: body.propertyId,
       roomId: body.roomId,
       bedId: body.bedId,
-      checkInDate: new Date().toISOString().slice(0, 10),
+      checkInDate: checkIn,
+      stayType: isDaily ? 'daily' : 'monthly',
+      dailyRate: isDaily ? Number(body.dailyRate || 0) : undefined,
+      expectedCheckOutDate: isDaily ? checkOut : undefined,
+      totalDays: isDaily ? totalDays : undefined,
       status: 'active',
       userId: memberId
     };
@@ -401,13 +447,24 @@ export const addMockMember = (body) => {
       const room = prop?.rooms?.find(r => r._id === body.roomId);
       const bed = room?.beds?.find(b => b._id === body.bedId);
       if (bed) {
-        rentAmount = bed.monthlyRent;
+        if (isDaily) {
+          const rate = Number(body.dailyRate) || bed.dailyRent || Math.round(bed.monthlyRent / 30);
+          rentAmount = rate * totalDays;
+          newRes.dailyRate = rate;
+        } else {
+          rentAmount = bed.monthlyRent;
+        }
         bed.status = 'occupied';
         bed.residentId = resId;
       }
+    } else if (isDaily) {
+      const rate = Number(body.dailyRate) || 500;
+      rentAmount = rate * totalDays;
+      newRes.dailyRate = rate;
     }
 
     const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const invoiceMonthStr = isDaily ? `${currentMonthStr}-DAILY-${resId}` : currentMonthStr;
 
     // Auto-create invoice
     const paymentRecord = {
@@ -415,7 +472,9 @@ export const addMockMember = (body) => {
       organizationId: 'demo-org',
       propertyId: { _id: body.propertyId, name: 'Greenview Residency' },
       residentId: { _id: resId, name: body.name, mobile: body.mobile, email: body.email },
-      invoiceMonth: currentMonthStr,
+      invoiceMonth: invoiceMonthStr,
+      billingType: isDaily ? 'daily' : 'monthly',
+      stayPeriod: isDaily ? { startDate: new Date(checkIn), endDate: new Date(checkOut), totalDays } : undefined,
       purpose: 'rent',
       amount: rentAmount,
       receivedAmount: 0,
@@ -817,5 +876,63 @@ export const checkAndGenerateMockPropertyMaintenanceCharges = (orgId) => {
     }
   });
 };
+
+export const reportMockOfflinePayment = (id, data) => {
+  const payment = mockPayments.find(p => p._id === id);
+  if (!payment) throw new Error('Payment not found.');
+
+  payment.status = 'pending';
+  payment.method = data.method;
+  payment.referenceNumber = data.referenceNumber;
+  payment.reportedAmount = data.amount !== undefined ? Number(data.amount) : payment.amount;
+  payment.notes = data.notes || '';
+  if (data.screenshot) {
+    payment.screenshot = data.screenshot;
+  }
+  
+  if (!payment.history) payment.history = [];
+  payment.history.push({
+    action: 'offline_payment_reported',
+    performedBy: 'resident',
+    timestamp: new Date(),
+    details: { method: data.method, referenceNumber: data.referenceNumber }
+  });
+
+  return payment;
+};
+
+export const approveMockOfflinePayment = (id, userId) => {
+  const payment = mockPayments.find(p => p._id === id);
+  if (!payment) throw new Error('Payment not found.');
+
+  const currentReceived = payment.receivedAmount || 0;
+  const approveAmount = payment.reportedAmount !== undefined ? payment.reportedAmount : (payment.amount - currentReceived);
+  const totalReceived = currentReceived + approveAmount;
+
+  payment.receivedAmount = Math.min(totalReceived, payment.amount);
+  payment.status = payment.receivedAmount >= payment.amount ? 'paid' : 'partially_paid';
+  payment.paidAt = new Date().toISOString();
+
+  if (!payment.transactions) payment.transactions = [];
+  payment.transactions.push({
+    _id: `tx-${Date.now()}`,
+    amount: approveAmount,
+    paidAt: new Date().toISOString(),
+    method: payment.method || 'upi',
+    referenceNumber: payment.referenceNumber,
+    notes: payment.notes || 'Approved reported offline payment'
+  });
+
+  if (!payment.history) payment.history = [];
+  payment.history.push({
+    action: 'offline_payment_approved',
+    performedBy: userId,
+    timestamp: new Date(),
+    details: { amount: approveAmount }
+  });
+
+  return payment;
+};
+
 
 

@@ -216,3 +216,20 @@ export const markNotificationRead = asyncHandler(async (req, res) => {
   const result = await tenantService.markNotificationRead(req.tenant, req.params.id);
   res.json(result);
 });
+
+/**
+ * POST / Report offline payment (UPI QR / Bank Transfer)
+ */
+export const reportOfflinePayment = asyncHandler(async (req, res) => {
+  const result = await tenantService.reportOfflinePayment(req.tenant, req.auth, req.params.id, req.body);
+  res.json(result);
+});
+
+/**
+ * POST / Approve reported offline payment
+ */
+export const approveOfflinePayment = asyncHandler(async (req, res) => {
+  const result = await tenantService.approveOfflinePayment(req.tenant, req.auth, req.params.id);
+  res.json(result);
+});
+

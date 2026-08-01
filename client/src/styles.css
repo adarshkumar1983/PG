@@ -758,19 +758,23 @@ header {
   position: fixed;
   inset: 0;
   background: #14221d99;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   z-index: 30;
-  padding: 20px
+  padding: 20px;
+  overflow-y: auto;
 }
 
 .modal {
   width: min(510px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow-y: auto;
   background: #fff;
   border-radius: 16px;
   padding: 28px;
   position: relative;
-  box-shadow: 0 24px 80px #0004
+  box-shadow: 0 24px 80px #0004;
 }
 
 .modal-x {
@@ -846,7 +850,13 @@ header {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 25px
+  margin-top: 25px;
+  position: sticky;
+  bottom: -28px;
+  background: var(--modal-bg);
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  z-index: 10;
 }
 
 .secondary {

@@ -9,7 +9,7 @@ const springTransition = {
   damping: 18
 };
 
-export function Login({ onLogin, onSwitchView }) {
+export function Login({ onLogin, onSwitchView, onSwitchForgotPassword }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -165,7 +165,7 @@ export function Login({ onLogin, onSwitchView }) {
             <div className="input-group">
               <div className="label-row">
                 <label htmlFor="auth-password">Password</label>
-                <button type="button" className="forgot-btn" tabIndex={0}>Forgot password?</button>
+                <button type="button" onClick={onSwitchForgotPassword} className="forgot-btn" tabIndex={0}>Forgot password?</button>
               </div>
               <motion.div
                 className="input-wrapper"

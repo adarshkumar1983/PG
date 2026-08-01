@@ -7,6 +7,7 @@ export function AddRoomModal({ onClose, onAdd }) {
   const [acType, setAcType] = useState('non-ac');
   const [sharingType, setSharingType] = useState('double');
   const [rent, setRent] = useState('7500');
+  const [dailyRent, setDailyRent] = useState('400');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -17,6 +18,7 @@ export function AddRoomModal({ onClose, onAdd }) {
       _id: `bed-${Date.now()}-${i}`,
       label: `Bed ${String.fromCharCode(65 + i)}`,
       monthlyRent: Number(rent),
+      dailyRent: Number(dailyRent || Math.round(Number(rent) / 30)),
       status: 'vacant'
     }));
 
@@ -65,9 +67,17 @@ export function AddRoomModal({ onClose, onAdd }) {
           </label>
         </div>
 
-        <label>Rent per bed (₹/month) *
-          <input required type="number" min="0" value={rent} onChange={e => setRent(e.target.value)} />
-        </label>
+        <div className="form-row">
+          <label>Monthly Rent per bed (₹/month) *
+            <input required type="number" min="0" value={rent} onChange={e => {
+              setRent(e.target.value);
+              if (e.target.value) setDailyRent(String(Math.round(Number(e.target.value) / 30)));
+            }} />
+          </label>
+          <label>Daily Rent per bed (₹/day)
+            <input type="number" min="0" value={dailyRent} onChange={e => setDailyRent(e.target.value)} placeholder="e.g. 400" />
+          </label>
+        </div>
 
         <div className="modal-actions">
           <button type="button" className="secondary" onClick={onClose}>Cancel</button>

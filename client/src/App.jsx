@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AcceptInvite from './pages/AcceptInvite.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { getThemeSetting, applyTheme } from './utils/theme.js';
 
@@ -48,6 +50,7 @@ function App() {
   const [view, setView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('token')) return 'accept-invite';
+    if (params.has('resetToken')) return 'reset-password';
     return 'login';
   });
 
@@ -71,9 +74,13 @@ function App() {
       return <Register onSwitchView={() => setView('login')} />;
     case 'accept-invite':
       return <AcceptInvite onSwitchView={() => setView('login')} />;
+    case 'forgot-password':
+      return <ForgotPassword onSwitchView={() => setView('login')} />;
+    case 'reset-password':
+      return <ResetPassword onSwitchView={() => setView('login')} />;
     case 'login':
     default:
-      return <Login onLogin={handleLogin} onSwitchView={() => setView('register')} />;
+      return <Login onLogin={handleLogin} onSwitchView={() => setView('register')} onSwitchForgotPassword={() => setView('forgot-password')} />;
   }
 }
 

@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { X, Printer, Download, Building2, CheckCircle2 } from 'lucide-react';
-import { money } from '../utils/formatters.js';
+import { money, formatInvoicePeriod } from '../utils/formatters.js';
 
-export default function ReceiptModal({ payment, onClose, pgName = "StayZen Residency" }) {
+export default function ReceiptModal({ payment, onClose, pgName, properties = [] }) {
   const receiptRef = useRef();
 
   const handlePrint = () => {
@@ -14,7 +14,7 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
     printWindow.document.write(`
       <html>
         <head>
-          <title>Payment Receipt - ${payment.referenceNumber || payment._id}</title>
+          <title>Payment Receipt - ${payment.referenceNumber || payment._id || 'N/A'}</title>
           <style>
             body {
               font-family: 'DM Sans', Arial, sans-serif;
@@ -166,13 +166,133 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
   const residentEmail = payment.residentId?.email || 'N/A';
   const residentMobile = payment.residentId?.mobile || 'N/A';
   
-  // Format room label
-  const roomLabel = payment.room || (payment.residentId?.roomId ? `Room ${payment.residentId.roomId}` : 'General');
+  // Extract and resolve room & bed label
+  const getRoomAndBedDetails = () => {
+    const resident = payment.residentId;
+    const rawRoomId = resident?.roomId || payment.roomId || payment.room;
+    const rawBedId = resident?.bedId || payment.bedId || payment.bed;
+    const rawPropertyId = resident?.propertyId || payment.propertyId;
+
+    let roomNumber = null;
+    let bedLabel = null;
+
+    const isObjectId = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val);
+
+    // Build unique properties list to search
+    const propertiesList = [];
+    if (Array.isArray(properties) && properties.length > 0) {
+      propertiesList.push(...properties);
+    }
+    if (payment.propertyId && typeof payment.propertyId === 'object' && payment.propertyId.rooms) {
+      propertiesList.push(payment.propertyId);
+    }
+    if (resident?.propertyId && typeof resident.propertyId === 'object' && resident.propertyId.rooms) {
+      propertiesList.push(resident.propertyId);
+    }
+
+    const uniqueProps = [];
+    const seenIds = new Set();
+    for (const prop of propertiesList) {
+      const idStr = (prop._id || prop.id)?.toString();
+      if (idStr && !seenIds.has(idStr)) {
+        seenIds.add(idStr);
+        uniqueProps.push(prop);
+      }
+    }
+
+    // Locate matching property
+    let matchedProp = null;
+    const propIdStr = (typeof rawPropertyId === 'object' ? (rawPropertyId?._id || rawPropertyId?.id) : rawPropertyId)?.toString();
+    if (propIdStr) {
+      matchedProp = uniqueProps.find(p => (p._id || p.id)?.toString() === propIdStr);
+    }
+    if (!matchedProp && uniqueProps.length === 1) {
+      matchedProp = uniqueProps[0];
+    }
+    if (!matchedProp && rawRoomId && isObjectId(rawRoomId.toString())) {
+      matchedProp = uniqueProps.find(p => 
+        p.rooms?.some(r => (r._id || r.id)?.toString() === rawRoomId.toString())
+      );
+    }
+
+    if (matchedProp && matchedProp.rooms) {
+      const room = matchedProp.rooms.find(r => {
+        const rIdStr = (r._id || r.id)?.toString();
+        const rNumStr = r.number?.toString();
+        const targetStr = rawRoomId?.toString();
+        return (rIdStr && rIdStr === targetStr) || (rNumStr && rNumStr === targetStr);
+      });
+
+      if (room) {
+        roomNumber = room.number;
+        if (rawBedId) {
+          const bed = room.beds?.find(b => {
+            const bIdStr = (b._id || b.id)?.toString();
+            const bLabelStr = b.label?.toString();
+            const targetBedStr = rawBedId?.toString();
+            return (bIdStr && bIdStr === targetBedStr) || (bLabelStr && bLabelStr === targetBedStr);
+          });
+          if (bed) {
+            bedLabel = bed.label;
+          }
+        }
+      }
+    }
+
+    if (!roomNumber && rawRoomId) {
+      const strVal = rawRoomId.toString();
+      if (!isObjectId(strVal)) {
+        roomNumber = strVal;
+      }
+    }
+
+    if (!bedLabel && rawBedId) {
+      const strVal = rawBedId.toString();
+      if (!isObjectId(strVal)) {
+        bedLabel = strVal;
+      }
+    }
+
+    if (roomNumber && bedLabel) {
+      return `Room ${roomNumber} · ${bedLabel}`;
+    } else if (roomNumber) {
+      return `Room ${roomNumber}`;
+    } else if (bedLabel) {
+      return bedLabel;
+    }
+    return 'General';
+  };
+
+  const roomLabel = getRoomAndBedDetails();
+
+  // Resolve property name / PG name
+  const resolvedPropDetails = properties.length > 0 ? (() => {
+    const resident = payment.residentId;
+    const rawPropertyId = resident?.propertyId || payment.propertyId;
+    const propIdStr = (typeof rawPropertyId === 'object' ? (rawPropertyId?._id || rawPropertyId?.id) : rawPropertyId)?.toString();
+    if (propIdStr) {
+      const p = properties.find(p => (p._id || p.id)?.toString() === propIdStr);
+      if (p) return p;
+    }
+    if (properties.length === 1) return properties[0];
+    return null;
+  })() : null;
+
+  const finalPgName = pgName || resolvedPropDetails?.name || payment.propertyId?.name || "StayZen Residency";
   
   const paymentDate = payment.paidAt ? new Date(payment.paidAt).toLocaleString('en-IN') : new Date(payment.updatedAt).toLocaleString('en-IN');
-  const receiptNum = payment.referenceNumber || `REC-${payment._id.toString().slice(-8).toUpperCase()}`;
+  const receiptNum = payment.referenceNumber || (payment._id ? `REC-${payment._id.toString().slice(-8).toUpperCase()}` : 'N/A');
 
   const remainingBalance = Math.max(0, payment.amount - (payment.receivedAmount || payment.amount));
+
+  const isUPI = payment.method?.toLowerCase() === 'upi';
+  let upiRefNum = payment.referenceNumber;
+  if (!upiRefNum && Array.isArray(payment.transactions)) {
+    const txWithRef = payment.transactions.find(t => t.referenceNumber);
+    if (txWithRef) {
+      upiRefNum = txWithRef.referenceNumber;
+    }
+  }
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -196,7 +316,7 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--green)', paddingBottom: '16px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: '800', color: 'var(--green)', fontFamily: 'Manrope, sans-serif' }}>
                 <span style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', background: 'var(--green)', color: '#fff', borderRadius: '8px' }}><Building2 size={16} /></span>
-                <span>{pgName}</span>
+                <span>{finalPgName}</span>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Receipt</h2>
@@ -217,6 +337,9 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
                 <p style={{ margin: 0 }}><b>Receipt No:</b> {receiptNum}</p>
                 <p style={{ margin: '2px 0 0 0', color: 'var(--text-secondary)' }}><b>Date:</b> {paymentDate}</p>
                 <p style={{ margin: '2px 0 0 0', color: 'var(--text-secondary)' }}><b>Payment Method:</b> <span style={{ textTransform: 'uppercase', fontWeight: '600' }}>{payment.method || 'cash'}</span></p>
+                {isUPI && upiRefNum && (
+                  <p style={{ margin: '2px 0 0 0', color: 'var(--text-secondary)' }}><b>UPI Ref:</b> <span style={{ fontWeight: '600' }}>{upiRefNum}</span></p>
+                )}
               </div>
             </div>
 
@@ -236,7 +359,20 @@ export default function ReceiptModal({ payment, onClose, pgName = "StayZen Resid
                     <b style={{ textTransform: 'capitalize' }}>{payment.purpose || 'rent'} billing</b>
                     {payment.notes && <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Notes: {payment.notes}</p>}
                   </td>
-                  <td style={{ textAlign: 'center', padding: '12px 8px', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>{payment.invoiceMonth}</td>
+                  <td style={{ textAlign: 'center', padding: '12px 8px', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>
+                    {payment.billingType === 'daily' || payment.stayPeriod ? (
+                      <div>
+                        <b>Daily Stay</b>
+                        {payment.stayPeriod?.totalDays && (
+                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '11px' }}>
+                            {payment.stayPeriod.totalDays} Days ({new Date(payment.stayPeriod.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - {new Date(payment.stayPeriod.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
+                          </small>
+                        )}
+                      </div>
+                    ) : (
+                      formatInvoicePeriod(payment)
+                    )}
+                  </td>
                   <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>{money(payment.amount)}</td>
                   <td style={{ textAlign: 'right', padding: '12px 8px', fontSize: '13px', borderBottom: '1px solid var(--border)', fontWeight: '700', color: 'var(--green)' }}>{money(payment.receivedAmount || payment.amount)}</td>
                 </tr>
