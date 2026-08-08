@@ -16,6 +16,10 @@ import { MessMenu, MealSkip } from '../models/Mess.js';
 import crypto from 'crypto';
 import PaymentService from './paymentService.js';
 
+const getAppUrl = () => {
+  return process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+};
+
 export function formatInvoicePeriodHelper(p) {
   if (!p) return '';
   if (p.stayPeriod && p.stayPeriod.startDate && p.stayPeriod.endDate) {
@@ -527,7 +531,7 @@ export async function createMember(tenant, data) {
   if (!isDbConnected()) {
     const mockMem = mockStore.addMockMember({ name, email, mobile, role, propertyId, roomId, bedId });
     const inviteToken = jwt.sign({ membershipId: mockMem.id, email: email || mobile }, accessSecret, { expiresIn: '7d' });
-    const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+    const inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
     attemptSendInvitation(email, mobile, name, role, tenant.organizationId, inviteLink);
     return { ...mockMem, inviteLink };
   }
@@ -676,7 +680,7 @@ export async function createMember(tenant, data) {
   }
 
   const inviteToken = jwt.sign({ membershipId: membership.id, email: user.email || user.mobile }, accessSecret, { expiresIn: '7d' });
-  const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+  const inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
 
   attemptSendInvitation(user.email, user.mobile, user.name, role, tenant.organizationId, inviteLink);
 
@@ -836,7 +840,7 @@ export async function resendInvite(tenant, id) {
       throw err;
     }
     const inviteToken = jwt.sign({ membershipId: updated.id, email: updated.email || updated.mobile }, accessSecret, { expiresIn: '7d' });
-    const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+    const inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
     attemptSendInvitation(updated.email, updated.mobile, updated.name, updated.role, tenant.organizationId, inviteLink);
     return { ...updated, inviteLink };
   }
@@ -859,7 +863,7 @@ export async function resendInvite(tenant, id) {
   }
 
   const inviteToken = jwt.sign({ membershipId: membership.id, email: user.email || user.mobile }, accessSecret, { expiresIn: '7d' });
-  const inviteLink = `http://localhost:5173/accept-invite?token=${inviteToken}`;
+  const inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
 
   attemptSendInvitation(user.email, user.mobile, user.name, membership.role, tenant.organizationId, inviteLink);
 
