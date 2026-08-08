@@ -862,6 +862,28 @@ export default function SettingsPage({ session }) {
                     </label>
                   </div>
 
+                  <div className="form-label" style={{ marginTop: '10px' }}>
+                    Quick Select Bank
+                    <div className="bank-selector-grid">
+                      {MAJOR_BANKS.map(bank => {
+                        const isSelected = form.bankDetails.bankName === bank.name;
+                        return (
+                          <div
+                            key={bank.code}
+                            className={`bank-pill ${isSelected ? 'selected' : ''}`}
+                            onClick={() => handleQuickBankSelect(bank)}
+                            style={isSelected ? { backgroundColor: bank.bg } : {}}
+                          >
+                            <span className="bank-avatar" style={isSelected ? { backgroundColor: bank.color, color: '#fff' } : {}}>
+                              {bank.code}
+                            </span>
+                            <span className="bank-title-text">{bank.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Account Name with visual match meter */}
                   <label className="form-label" style={{ marginTop: '4px' }}>
                     Account Holder Name

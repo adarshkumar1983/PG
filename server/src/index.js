@@ -33,7 +33,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 const app = express();
-app.use(cors());
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
@@ -74,6 +78,18 @@ app.post('/api/residents', (req, res) => {
   const { name, phone, checkInDate } = req.body;
   if (!name || !phone || !checkInDate) return res.status(400).json({ message: 'Name, phone and check-in date are required.' });
   res.status(201).json({ id: crypto.randomUUID(), ...req.body, status: 'draft' });
+});
+
+// Serve static client build assets in production
+const clientBuildPath = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientBuildPath));
+
+// Wildcard routing to serve React SPA index.html for non-API client routes
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ message: 'API endpoint not found.' });
+  }
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
 // Centralized error handling middleware

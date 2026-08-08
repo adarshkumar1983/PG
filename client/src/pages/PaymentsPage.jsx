@@ -1013,6 +1013,12 @@ export default function PaymentsPage({ session, properties = [], members = [], u
         </div>
       )}
 
+      {selectedSettlement && (
+        <SettlementDetailsModal
+          payment={selectedSettlement}
+          onClose={() => setSelectedSettlement(null)}
+        />
+      )}
       {toast && <div className="toast">✓ {toast}</div>}
       {paymentLoading && (
         <div className="toast" style={{ backgroundColor: '#e0efe3', color: '#17644f', border: '1px solid #c2ffd4' }}>

@@ -199,7 +199,19 @@ export function MembersPage({ session, properties = [], onRefresh }) {
       setMembers(v => [result, ...v]);
       if (onRefresh) onRefresh();
       setOpen(false);
-      setForm({ name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '' });
+      setForm({
+        name: '',
+        email: '',
+        mobile: '',
+        role: 'staff',
+        propertyId: '',
+        roomId: '',
+        bedId: '',
+        stayType: 'monthly',
+        dailyRate: '',
+        checkInDate: '',
+        checkOutDate: ''
+      });
       triggerToast(`Invitation email sent automatically to ${result.email || result.mobile}!`);
     } catch (err) {
       setError(err.message || 'Could not add member.');
@@ -241,7 +253,19 @@ export function MembersPage({ session, properties = [], onRefresh }) {
 
   const handleClose = () => {
     setOpen(false);
-    setForm({ name: '', email: '', mobile: '', role: 'staff', propertyId: '', roomId: '', bedId: '' });
+    setForm({
+      name: '',
+      email: '',
+      mobile: '',
+      role: 'staff',
+      propertyId: '',
+      roomId: '',
+      bedId: '',
+      stayType: 'monthly',
+      dailyRate: '',
+      checkInDate: '',
+      checkOutDate: ''
+    });
     setError('');
   };
 

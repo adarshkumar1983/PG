@@ -82,7 +82,8 @@ export default function MaintenancePage({ session, properties = [], members = []
       }
 
       // Collected this month
-      if (p.paidAt && p.paidAt.slice(0, 7) === currentMonthStr) {
+      const paidAtStr = p.paidAt ? (p.paidAt instanceof Date ? p.paidAt.toISOString() : String(p.paidAt)) : '';
+      if (paidAtStr && paidAtStr.slice(0, 7) === currentMonthStr) {
         collectedThisMonth += pAmt;
       }
 
@@ -122,12 +123,13 @@ export default function MaintenancePage({ session, properties = [], members = []
   // Open edit settings modal
   const openEditModal = (prop) => {
     setSelectedProperty(prop);
+    const nextDueDateStr = prop.maintenanceNextDueDate ? (prop.maintenanceNextDueDate instanceof Date ? prop.maintenanceNextDueDate.toISOString() : String(prop.maintenanceNextDueDate)) : '';
     setForm({
       maintenanceEnabled: prop.maintenanceEnabled || false,
       maintenanceAmount: prop.maintenanceAmount || 0,
       maintenanceFrequency: prop.maintenanceFrequency || 'monthly',
       maintenanceCustomMonths: prop.maintenanceCustomMonths || 1,
-      maintenanceNextDueDate: prop.maintenanceNextDueDate ? prop.maintenanceNextDueDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      maintenanceNextDueDate: nextDueDateStr ? nextDueDateStr.slice(0, 10) : new Date().toISOString().slice(0, 10),
       maintenanceSeparateInvoice: prop.maintenanceSeparateInvoice || false
     });
     setEditModal(true);
