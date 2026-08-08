@@ -65,26 +65,16 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
 
   if (hasSmtpConfig) {
     try {
-      const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com';
-      const transportConfig = isGmail
-        ? {
-          service: 'gmail',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
+      const transportConfig = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        family: 4,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
         }
-        : {
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
-        };
+      };
 
       const transporter = nodemailer.createTransport(transportConfig);
 
@@ -224,26 +214,16 @@ export async function sendReceiptEmail(toEmail, toName, details) {
 
   if (hasSmtpConfig) {
     try {
-      const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com';
-      const transportConfig = isGmail
-        ? {
-          service: 'gmail',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
+      const transportConfig = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        family: 4,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
         }
-        : {
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
-        };
+      };
 
       const transporter = nodemailer.createTransport(transportConfig);
 
@@ -344,26 +324,16 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
 
   if (hasSmtpConfig) {
     try {
-      const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com';
-      const transportConfig = isGmail
-        ? {
-          service: 'gmail',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
+      const transportConfig = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        family: 4,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
         }
-        : {
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true',
-          family: 4,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
-        };
+      };
 
       const transporter = nodemailer.createTransport(transportConfig);
 
