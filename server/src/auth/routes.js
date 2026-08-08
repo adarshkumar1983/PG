@@ -14,6 +14,10 @@ const signAccess = user => jwt.sign({ sub: user.id, platformRole: user.platformR
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
+const getAppUrl = () => {
+  return process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+};
+
 router.post('/register', async (req, res) => {
   if (!isDbConnected()) {
     return res.status(201).json({ message: 'Registration submitted for approval (Demo mode). Since MongoDB is offline, please log in using the demo account.', organizationId: 'demo-org' });
@@ -79,7 +83,7 @@ router.post('/forgot-password', async (req, res) => {
     if (!isDbConnected()) {
       if (email.toLowerCase() === 'owner@stayzen.demo') {
         const token = jwt.sign({ sub: 'demo-owner', email: email.toLowerCase(), type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
-        const resetLink = `http://localhost:5173/?resetToken=${token}`;
+        const resetLink = `${getAppUrl()}/?resetToken=${token}`;
         await sendResetPasswordEmail(email.toLowerCase(), 'Adarsh Kumar', resetLink);
         return res.json({ message: 'Simulated password reset email sent successfully! Please check sent_emails/ folder.' });
       }
@@ -92,7 +96,7 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     const token = jwt.sign({ sub: user.id, email: user.email, type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
-    const resetLink = `http://localhost:5173/?resetToken=${token}`;
+    const resetLink = `${getAppUrl()}/?resetToken=${token}`;
     await sendResetPasswordEmail(user.email, user.name, resetLink);
 
     res.json({ message: 'Password reset link sent successfully.' });
