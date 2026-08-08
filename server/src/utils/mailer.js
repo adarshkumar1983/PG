@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dns from 'dns';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +71,10 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         connectionTimeout: 5000,
         greetingTimeout: 5000,
         socketTimeout: 5000,
+        lookup: (hostname, options, callback) => {
+          options.family = 4;
+          return dns.lookup(hostname, options, callback);
+        },
         auth: {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS
@@ -102,6 +107,10 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       connectionTimeout: 5000,
       greetingTimeout: 5000,
       socketTimeout: 5000,
+      lookup: (hostname, options, callback) => {
+        options.family = 4;
+        return dns.lookup(hostname, options, callback);
+      },
       auth: {
         user: testAccount.user,
         pass: testAccount.pass
