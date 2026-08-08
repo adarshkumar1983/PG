@@ -69,7 +69,7 @@ export default function SettlementDetailsModal({ payment, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <span className="eyebrow" style={{ margin: 0 }}>Razorpay Route Settlement</span>
+              <span className="eyebrow" style={{ margin: 0 }}>Online Gateway Settlement</span>
               <span 
                 style={{ 
                   backgroundColor: statusBg, 

@@ -233,3 +233,43 @@ export const approveOfflinePayment = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+/**
+ * GET / Get Mess Menu
+ */
+export const getMessMenu = asyncHandler(async (req, res) => {
+  const propertyId = req.query.propertyId || req.headers['x-property-id'];
+  const menu = await tenantService.getMessMenu(req.tenant?.id || 'demo-org', propertyId);
+  res.json(menu);
+});
+
+/**
+ * POST / Update Mess Menu
+ */
+export const updateMessMenu = asyncHandler(async (req, res) => {
+  const propertyId = req.body.propertyId || req.headers['x-property-id'];
+  const { dayOfWeek, breakfast, lunch, snacks, dinner } = req.body;
+  if (!dayOfWeek) return res.status(400).json({ message: 'dayOfWeek is required.' });
+  const updated = await tenantService.updateMessMenu(req.tenant?.id || 'demo-org', propertyId, dayOfWeek, { breakfast, lunch, snacks, dinner });
+  res.json(updated);
+});
+
+/**
+ * GET / Get Meal Skips
+ */
+export const getMealSkips = asyncHandler(async (req, res) => {
+  const propertyId = req.query.propertyId || req.headers['x-property-id'];
+  const date = req.query.date;
+  const skips = await tenantService.getMealSkips(req.tenant?.id || 'demo-org', propertyId, date);
+  res.json(skips);
+});
+
+/**
+ * POST / Toggle Meal Skip
+ */
+export const toggleMealSkip = asyncHandler(async (req, res) => {
+  const propertyId = req.body.propertyId || req.headers['x-property-id'];
+  const result = await tenantService.toggleMealSkip(req.tenant?.id || 'demo-org', propertyId, req.body);
+  res.json(result);
+});
+
+

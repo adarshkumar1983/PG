@@ -25,6 +25,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const [editPropertyId, setEditPropertyId] = useState('');
   const [editRoomId, setEditRoomId] = useState('');
   const [editBedId, setEditBedId] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [updating, setUpdating] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -112,6 +113,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const startEditing = (m) => {
     setEditingMember(m);
     setEditRole(m.role);
+    setEditEmail(m.email || '');
 
     const propId = m.propertyId || properties[0]?._id || '';
     const prop = properties.find(p => p._id === propId);
@@ -211,6 +213,11 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     setEditError('');
     setUpdating(true);
     try {
+      const payload = { role: editRole, propertyId: editPropertyId, roomId: editRoomId, bedId: editBedId };
+      if (editingMember.status === 'invited') {
+        payload.email = editEmail;
+      }
+
       const response = await fetch(`/api/tenant/members/${editingMember.id}`, {
         method: 'PUT',
         headers: {
@@ -218,7 +225,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
           Authorization: `Bearer ${session.accessToken}`,
           'x-organization-id': session.organizationId
         },
-        body: JSON.stringify({ role: editRole, propertyId: editPropertyId, roomId: editRoomId, bedId: editBedId })
+        body: JSON.stringify(payload)
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Unable to update member role.');
@@ -736,6 +743,28 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <option value="resident">Resident / Tenant</option>
               </select>
             </label>
+
+            {editingMember.status === 'invited' ? (
+              <label style={{ marginTop: '14px', display: 'block' }}>Email Address *
+                <input
+                  type="email"
+                  required
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  placeholder="e.g. name@example.com"
+                  style={{ width: '100%', marginTop: '4px' }}
+                />
+              </label>
+            ) : (
+              <label style={{ marginTop: '14px', display: 'block' }}>Email Address (Registered)
+                <input
+                  type="email"
+                  disabled
+                  value={editingMember.email}
+                  style={{ width: '100%', marginTop: '4px', background: 'var(--table-head-bg)', cursor: 'not-allowed', color: 'var(--text-secondary)' }}
+                />
+              </label>
+            )}
 
             {editRole === 'resident' && properties.length > 0 && (
               <div style={{ marginTop: '14px', borderTop: '1px dashed #dce3de', paddingTop: '14px' }}>

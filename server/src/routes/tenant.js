@@ -78,4 +78,12 @@ router.get('/settlements/analytics', authorizePaymentsRead, tenantController.get
 router.get('/notifications', authorizePaymentsRead, tenantController.getNotifications);
 router.put('/notifications/:id/read', authorizePaymentsRead, tenantController.markNotificationRead);
 
+router.route('/mess/menu')
+  .get(authorizePaymentsRead, tenantController.getMessMenu)
+  .post(authorize(permissions.MANAGE_PG), tenantController.updateMessMenu);
+
+router.route('/mess/skips')
+  .get(authorizePaymentsRead, tenantController.getMealSkips)
+  .post(authorizePaymentsRead, tenantController.toggleMealSkip);
+
 export default router;

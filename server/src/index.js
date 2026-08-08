@@ -34,36 +34,24 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 app.use('/api/auth', authRoutes);
 app.use('/api/tenant', tenantRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.post('/api/payments/webhook', async (req, res) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  const signature = req.headers['x-razorpay-signature'];
-
-  if (secret && signature) {
-    const crypto = await import('crypto');
-    const shasum = crypto.createHmac('sha256', secret);
-    shasum.update(JSON.stringify(req.body));
-    const digest = shasum.digest('hex');
-
-    if (digest !== signature) {
-      console.warn('Webhook signature verification failed.');
-      return res.status(400).json({ status: 'signature_invalid' });
-    }
-  }
-
-  const { event, payload } = req.body;
+app.post('/api/webhooks/cashfree', async (req, res) => {
   try {
-    const tenantService = await import('./services/tenantService.js');
-    await tenantService.handleRazorpayWebhook(event, payload);
+    const paymentService = await import('./services/paymentService.js');
+    await paymentService.default.handleWebhook('cashfree', req.headers, req.rawBody || '');
+    res.json({ status: 'ok' });
   } catch (err) {
-    console.error('Error handling webhook event:', err);
+    console.error('Error handling cashfree webhook:', err);
+    res.status(400).json({ error: err.message });
   }
-
-  res.json({ status: 'ok' });
 });
 
 if (process.env.MONGODB_URI) {
@@ -98,4 +86,6 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`StayZen API running on http://localhost:${port}`));
+
+// Picked up new Cashfree env variables, provider updates, and dynamic getters for reload.
 

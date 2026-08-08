@@ -36,7 +36,7 @@ export default function SettlementTimeline({ payment }) {
     },
     {
       title: 'Transfer Initiated',
-      desc: payment?.transferId ? `Transfer ID: ${payment.transferId}` : 'Razorpay Route transfer created',
+      desc: payment?.transferId ? `Transfer ID: ${payment.transferId}` : 'Online transfer created',
       icon: CheckCircle2,
       time: payment?.paidAt ? new Date(payment.paidAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : 'Processing'
     },

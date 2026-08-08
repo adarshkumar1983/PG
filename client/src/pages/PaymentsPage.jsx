@@ -74,13 +74,33 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     }
   };
 
-  const handlePayOnline = (paymentId, amount, label) => {
-    import('../utils/razorpay.js').then(({ processOnlinePayment }) => {
-      processOnlinePayment({
-        paymentId,
+  const handlePayOnline = async (paymentId, amount, label) => {
+    setPaymentLoading(true);
+    setPaymentStatusText("Initializing gateway...");
+    try {
+      const orderResponse = await fetch(`/api/tenant/payments/${paymentId}/initiate-charge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'x-organization-id': session.organizationId
+        }
+      });
+
+      const orderData = await orderResponse.json();
+      if (!orderResponse.ok) {
+        throw new Error(orderData.message || "Failed to create order on server.");
+      }
+
+      if (!orderData.paymentSessionId) {
+        throw new Error("Online payment gateway response is invalid (missing paymentSessionId).");
+      }
+
+      const { processCashfreePaymentDirect } = await import('../utils/cashfreeDirect.js');
+      await processCashfreePaymentDirect({
+        orderData,
         session,
         amountLabel: `${label} (₹${amount})`,
-        pgName: properties[0]?.name || "StayZen Residency",
         onSuccess: (msg) => {
           notify(msg);
           loadData();
@@ -94,7 +114,11 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           setPaymentStatusText(text);
         }
       });
-    });
+    } catch (err) {
+      notify(`Payment failed: ${err.message}`);
+      setPaymentLoading(false);
+      setPaymentStatusText('');
+    }
   };
   const [actionError, setActionError] = useState('');
   const [actionSaving, setActionSaving] = useState(false);

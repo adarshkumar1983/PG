@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Landmark, 
-  Save, 
-  Building, 
-  AlertCircle, 
-  CheckCircle, 
-  Percent, 
-  Eye, 
-  EyeOff, 
-  ShieldCheck, 
-  Sparkles, 
-  Loader2, 
-  RefreshCw, 
-  Info, 
+import {
+  Landmark,
+  Save,
+  Building,
+  AlertCircle,
+  CheckCircle,
+  Percent,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Sparkles,
+  Loader2,
+  RefreshCw,
+  Info,
   ArrowRight,
   ShieldAlert,
   HelpCircle,
@@ -42,6 +42,7 @@ export default function SettingsPage({ session }) {
     name: '',
     upiId: '',
     linkedAccountId: '',
+    gatewayProvider: 'none',
     directSettlementEnabled: true,
     onlineGatewayEnabled: true,
     bankDetails: {
@@ -56,7 +57,7 @@ export default function SettingsPage({ session }) {
   const [confirmAccountNumber, setConfirmAccountNumber] = useState('');
   const [showAccountNumber, setShowAccountNumber] = useState(false);
   const [showConfirmAccountNumber, setShowConfirmAccountNumber] = useState(false);
-  
+
   // IFSC variables
   const [ifscLoading, setIfscLoading] = useState(false);
   const [ifscError, setIfscError] = useState(null);
@@ -82,6 +83,7 @@ export default function SettingsPage({ session }) {
           name: data.name || '',
           upiId: data.upiId || '',
           linkedAccountId: data.linkedAccountId || '',
+          gatewayProvider: data.gatewayProvider || 'none',
           directSettlementEnabled: data.directSettlementEnabled !== false,
           onlineGatewayEnabled: data.onlineGatewayEnabled !== false,
           bankDetails: data.bankDetails || {
@@ -91,7 +93,7 @@ export default function SettingsPage({ session }) {
             ifscCode: ''
           }
         });
-        
+
         // Match confirm field initially
         if (data.bankDetails?.accountNumber) {
           setConfirmAccountNumber(data.bankDetails.accountNumber);
@@ -111,10 +113,10 @@ export default function SettingsPage({ session }) {
         setIfscResolvedData(null);
         return;
       }
-      
+
       setIfscLoading(true);
       setIfscError(null);
-      
+
       fetch(`https://ifsc.razorpay.com/${ifsc}`)
         .then(res => {
           if (!res.ok) throw new Error('Branch lookup failed. Please verify code.');
@@ -169,7 +171,7 @@ export default function SettingsPage({ session }) {
       showMsg('danger', 'Complete Account Number and IFSC Code to verify.');
       return;
     }
-    
+
     setPennyDropStatus('verifying');
     setPennyDropResult(null);
 
@@ -215,7 +217,7 @@ export default function SettingsPage({ session }) {
           color: data.color,
           bankRef: data.bankRef
         });
-        
+
         if (data.matched) {
           showMsg('success', `Penny drop verified! Auto-filled Account Holder Name: "${data.registeredName}"`);
         } else {
@@ -230,12 +232,14 @@ export default function SettingsPage({ session }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (form.linkedAccountId) {
-      const linkedAccRegex = /^acc_[a-zA-Z0-9]{14}$/;
-      if (!linkedAccRegex.test(form.linkedAccountId)) {
-        showMsg('danger', 'Invalid Razorpay Linked Account ID. Must start with "acc_" followed by exactly 14 characters (18 characters total).');
-        return;
+      if (form.gatewayProvider === 'cashfree') {
+        const cfVendorRegex = /^[a-zA-Z0-9_-]{1,40}$/;
+        if (!cfVendorRegex.test(form.linkedAccountId)) {
+          showMsg('danger', 'Invalid Cashfree Vendor ID. Must be alphanumeric (1-40 chars), optionally containing underscores or hyphens.');
+          return;
+        }
       }
     }
 
@@ -285,9 +289,10 @@ export default function SettingsPage({ session }) {
 
   return (
     <div className="settings-page-wrapper" style={{ maxWidth: '1140px', margin: '0 auto', padding: '24px' }}>
-      
+
       {/* Scoped CSS styling rules for a world-class UI */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .settings-grid {
           display: grid;
           grid-template-columns: 260px 1fr;
@@ -511,15 +516,15 @@ export default function SettingsPage({ session }) {
 
       {/* Global Toast Messages */}
       {message.text && (
-        <div 
-          className={`alert ${message.type}`} 
-          style={{ 
-            padding: '14px 20px', 
-            borderRadius: '14px', 
-            fontSize: '13px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '12px', 
+        <div
+          className={`alert ${message.type}`}
+          style={{
+            padding: '14px 20px',
+            borderRadius: '14px',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
             marginTop: '20px',
             backgroundColor: message.type === 'success' ? 'rgba(22, 163, 74, 0.08)' : message.type === 'warning' ? 'rgba(245, 158, 11, 0.08)' : 'rgba(239, 68, 68, 0.08)',
             color: message.type === 'success' ? '#16a34a' : message.type === 'warning' ? '#d97706' : '#dc2626',
@@ -534,34 +539,34 @@ export default function SettingsPage({ session }) {
 
       {/* Content Layout Grid */}
       <div className="settings-grid">
-        
+
         {/* Navigation Sidebar */}
         <aside className="aside-nav">
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`nav-link ${activeTab === 'general' ? 'active' : ''}`}
             onClick={() => setActiveTab('general')}
           >
             <Building size={16} />
             <span>General Profile</span>
           </button>
-          
-          <button 
-            type="button" 
+
+          <button
+            type="button"
             className={`nav-link ${activeTab === 'settlement' ? 'active' : ''}`}
             onClick={() => setActiveTab('settlement')}
           >
             <Landmark size={16} />
             <span>Direct Settlement</span>
           </button>
-          
-          <button 
-            type="button" 
+
+          <button
+            type="button"
             className={`nav-link ${activeTab === 'razorpay' ? 'active' : ''}`}
             onClick={() => setActiveTab('razorpay')}
           >
             <Percent size={16} />
-            <span>Razorpay Route</span>
+            <span>Online Gateway</span>
           </button>
 
           <div style={{ marginTop: '24px', padding: '16px', borderRadius: '14px', background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
@@ -574,7 +579,7 @@ export default function SettingsPage({ session }) {
 
         {/* Dynamic Panels */}
         <form onSubmit={handleSubmit} style={{ minWidth: 0 }}>
-          
+
           {/* General Tab */}
           {activeTab === 'general' && (
             <div key="general" className="settings-card fade-in-up">
@@ -606,10 +611,10 @@ export default function SettingsPage({ session }) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '28px' }}>
-                <button 
-                  type="submit" 
-                  className="primary" 
-                  disabled={saving} 
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={saving}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', backgroundColor: 'var(--green)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '13px', transition: 'all 0.15s ease' }}
                 >
                   <Save size={15} /> {saving ? 'Saving...' : 'Save Workspace Name'}
@@ -625,7 +630,7 @@ export default function SettingsPage({ session }) {
                 <div style={{ display: 'grid', gap: '16px', marginBottom: '28px', background: 'var(--table-head-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                   <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>Payment Options Configuration</h4>
                   <p style={{ margin: '0 0 16px', fontSize: '11px', color: 'var(--text-secondary)' }}>Toggle which payment channels are visible to your PG renters during checkout.</p>
-                  
+
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-primary)' }}>Direct Settlement (UPI / Bank Transfer)</strong>
@@ -694,7 +699,7 @@ export default function SettingsPage({ session }) {
                 </div>
 
                 <div style={{ display: 'grid', gap: '24px', marginTop: '28px' }}>
-                  
+
                   {/* UPI ID */}
                   <label className="form-label">
                     Settlement UPI ID
@@ -724,7 +729,7 @@ export default function SettingsPage({ session }) {
                     }}>
                       <h4 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>Direct UPI QR Code Preview</h4>
                       <p style={{ margin: '0 0 16px', fontSize: '11px', color: 'var(--text-secondary)' }}>This is how the base QR code will look. Renters will see a version populated with the exact rent amount due.</p>
-                      
+
                       <div style={{
                         background: '#ffffff',
                         padding: '12px',
@@ -738,7 +743,7 @@ export default function SettingsPage({ session }) {
                           style={{ display: 'block', width: '180px', height: '180px' }}
                         />
                       </div>
-                      
+
                       <div style={{ marginTop: '14px', fontSize: '13px', fontWeight: '600', color: 'var(--green)' }}>
                         {form.upiId}
                       </div>
@@ -762,8 +767,8 @@ export default function SettingsPage({ session }) {
                           onChange={e => handleBankChange('accountNumber', e.target.value.replace(/\D/g, ''))}
                           placeholder="Enter account number"
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="input-icon-btn"
                           onClick={() => setShowAccountNumber(!showAccountNumber)}
                         >
@@ -782,21 +787,21 @@ export default function SettingsPage({ session }) {
                           onChange={e => setConfirmAccountNumber(e.target.value.replace(/\D/g, ''))}
                           placeholder="Confirm account number"
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="input-icon-btn"
                           onClick={() => setShowConfirmAccountNumber(!showConfirmAccountNumber)}
                         >
                           {showConfirmAccountNumber ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
                       </div>
-                      
+
                       {confirmAccountNumber && form.bankDetails.accountNumber !== confirmAccountNumber && (
                         <span style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
                           <AlertCircle size={12} /> Account numbers do not match.
                         </span>
                       )}
-                      
+
                       {confirmAccountNumber && form.bankDetails.accountNumber === confirmAccountNumber && (
                         <span style={{ fontSize: '11px', color: '#166534', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
                           <CheckCircle size={12} /> Account numbers matched.
@@ -823,7 +828,7 @@ export default function SettingsPage({ session }) {
                           </span>
                         )}
                       </div>
-                      
+
                       {ifscError && (
                         <span style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
                           <AlertCircle size={12} /> {ifscError}
@@ -867,7 +872,7 @@ export default function SettingsPage({ session }) {
                       onChange={e => handleBankChange('accountName', e.target.value)}
                       placeholder="e.g. Arjun Mehta"
                     />
-                    
+
                     {/* Premium Name Match Progress Bar Meter */}
                     {localMatchEval && (
                       <div style={{
@@ -904,10 +909,10 @@ export default function SettingsPage({ session }) {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px' }}>
-                  <button 
-                    type="submit" 
-                    className="primary" 
-                    disabled={saving} 
+                  <button
+                    type="submit"
+                    className="primary"
+                    disabled={saving}
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', backgroundColor: 'var(--green)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '13px', transition: 'all 0.15s ease' }}
                   >
                     <Save size={15} /> {saving ? 'Saving...' : 'Save Settlement Details'}
@@ -973,7 +978,7 @@ export default function SettingsPage({ session }) {
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '11px', marginBottom: '4px', fontWeight: '600' }}>NPCI-Registered Holder Name</span>
                         <strong style={{ color: 'var(--text-primary)', fontSize: '14px' }}>{pennyDropResult.registeredName}</strong>
                       </div>
-                      
+
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '11px', marginBottom: '4px', fontWeight: '600' }}>Fuzzy Match Confidence</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1002,7 +1007,7 @@ export default function SettingsPage({ session }) {
             </div>
           )}
 
-          {/* Razorpay Gateway Tab */}
+          {/* Online Gateway Tab */}
           {activeTab === 'razorpay' && (
             <div key="razorpay" className="settings-card fade-in-up">
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
@@ -1010,39 +1015,62 @@ export default function SettingsPage({ session }) {
                   <Percent size={20} />
                 </div>
                 <div>
-                  <h3 style={{ margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Razorpay Split Settlements</h3>
-                  <p style={{ margin: '0', fontSize: '12px', color: 'var(--muted)', fontWeight: '500' }}>Integrate split transaction onboarding structures through Razorpay Route.</p>
+                  <h3 style={{ margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Online Gateway Configuration</h3>
+                  <p style={{ margin: '0', fontSize: '12px', color: 'var(--muted)', fontWeight: '500' }}>Configure split transaction onboarding structures.</p>
                 </div>
               </div>
 
-              <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: '1.6', margin: '0 0 24px 0', fontWeight: '500' }}>
-                Link your commercial business account using Razorpay Route. When residents pay online via card, UPI, or netbanking, transaction amounts are split instantly: settlements flow directly to your linked ledger minus StayZen's platform fee.
-              </p>
-
-              <div style={{ display: 'grid', gap: '20px' }}>
+              <div style={{ display: 'grid', gap: '20px', marginBottom: '24px' }}>
                 <label className="form-label">
-                  Razorpay Linked Account ID (Route Partner Code)
-                  <input
-                    type="text"
+                  Select Gateway Provider
+                  <select
                     className="styled-input"
-                    value={form.linkedAccountId}
-                    onChange={e => setForm(prev => ({ ...prev, linkedAccountId: e.target.value.trim() }))}
-                    placeholder="e.g. acc_Fv8a2H18kls7ya"
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', lineHeight: '1.4', display: 'block', fontWeight: '500' }}>
-                    Generate or copy this ID from **Route / Partner Accounts** tab in your Razorpay Dashboard.
-                  </span>
+                    value={form.gatewayProvider}
+                    onChange={e => setForm(prev => ({ ...prev, gatewayProvider: e.target.value }))}
+                  >
+                    <option value="none">None (Disabled)</option>
+                    <option value="cashfree">Cashfree Easy Split</option>
+                  </select>
                 </label>
               </div>
-                           {/* Premium Commission visual split flow diagram */}
+
+              {form.gatewayProvider === 'cashfree' && (
+                <>
+                  <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: '1.6', margin: '0 0 24px 0', fontWeight: '500' }}>
+                    Link your commercial business account using Cashfree Easy Split. When residents pay online, transaction amounts are split instantly: settlements flow directly to your linked ledger minus StayZen's platform fee.
+                  </p>
+                  <div style={{ display: 'grid', gap: '20px' }}>
+                    <label className="form-label">
+                      Cashfree Vendor ID (Easy Split Partner ID)
+                      <input
+                        type="text"
+                        className="styled-input"
+                        value={form.linkedAccountId}
+                        onChange={e => setForm(prev => ({ ...prev, linkedAccountId: e.target.value.trim() }))}
+                        placeholder="e.g. vendor_greenview_01"
+                      />
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', lineHeight: '1.4', display: 'block', fontWeight: '500' }}>
+                        Create or copy this ID from **Easy Split / Vendors** tab in your Cashfree Dashboard.
+                      </span>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {form.gatewayProvider === 'none' && (
+                <div style={{ padding: '20px', borderRadius: '12px', background: 'var(--table-head-bg)', border: '1px solid var(--border)', textAlign: 'center', color: 'var(--muted)', fontSize: '13px', fontWeight: '500' }}>
+                  Please select a payment gateway provider from the dropdown to enable split settlements.
+                </div>
+              )}
+              {/* Premium Commission visual split flow diagram */}
               <div style={{ backgroundColor: 'var(--app-bg)', border: '1.5px solid var(--border)', borderRadius: '16px', padding: '24px', marginTop: '28px', boxShadow: '0 4px 12px rgba(0,0,0,0.01)' }}>
                 <h5 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>Payout Routing Visualizer</h5>
-                
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
                   <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: '600' }}>Rent Invoice Amount:</span>
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>₹</span>
-                    <input 
+                    <input
                       type="number"
                       value={simulatorAmount}
                       onChange={e => setSimulatorAmount(e.target.value)}
@@ -1132,10 +1160,10 @@ export default function SettingsPage({ session }) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '28px' }}>
-                <button 
-                  type="submit" 
-                  className="primary" 
-                  disabled={saving} 
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={saving}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', backgroundColor: 'var(--green)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '13px', transition: 'all 0.15s ease' }}
                 >
                   <Save size={15} /> {saving ? 'Saving...' : 'Link Razorpay Account'}
@@ -1143,7 +1171,7 @@ export default function SettingsPage({ session }) {
               </div>
             </div>
           )}
-          
+
         </form>
       </div>
     </div>

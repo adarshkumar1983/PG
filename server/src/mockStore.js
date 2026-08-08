@@ -549,13 +549,16 @@ export const acceptMockInvite = (membershipId) => {
   return null;
 };
 
-export const updateMockMemberRole = (id, role, propertyId, roomId, bedId) => {
+export const updateMockMemberRole = (id, role, propertyId, roomId, bedId, email) => {
   const member = mockMembers.find(m => m.id === id);
   if (member) {
     member.role = role;
     member.propertyId = propertyId;
     member.roomId = roomId;
     member.bedId = bedId;
+    if (email && member.status === 'invited') {
+      member.email = email;
+    }
     return member;
   }
   return null;
@@ -933,6 +936,183 @@ export const approveMockOfflinePayment = (id, userId) => {
 
   return payment;
 };
+
+export let mockMessMenus = [
+  {
+    _id: 'mess-menu-1-mon',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Monday',
+    breakfast: { items: 'Aloo Paratha, Curd & Tea', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Dal Tadka, Jeera Rice, Bhindi Fry, Butter Milk', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'Samosa & Masala Chai', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Paneer Butter Masala, Rice, Dal, Gulab Jamun', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-tue',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Tuesday',
+    breakfast: { items: 'Idli, Vada, Sambar & Coconut Chutney', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Rajma Masala, Steamed Rice, Mix Veg, Curd', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'Veg Sandwich & Coffee', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Chana Masala, Veg Pulao, Dal, Fruit Custard', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-wed',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Wednesday',
+    breakfast: { items: 'Poha, Sev, Jalebi & Tea', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Kadhi Pakora, Steamed Rice, Aloo Gobi, Salad', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'Kachori & Tea', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Egg Curry / Malai Kofta, Dal Fry, Rice, Ice Cream', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-thu',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Thursday',
+    breakfast: { items: 'Masala Dosa, Sambhar & Green Chutney', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Chana Dal, Steamed Rice, Baingan Bharta, Raita', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'Bread Pakora & Coffee', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Mushroom Masala, Dal Makhani, Rice, Sweet Boondi', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-fri',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Friday',
+    breakfast: { items: 'Chole Bhature & Lassi', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Veg Kolhapuri, Dal Tadka, Rice, Curd', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'Pav Bhaji & Tea', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Veg / Chicken Biryani, Mirchi Ka Salan, Raita, Rasgulla', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-sat',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Saturday',
+    breakfast: { items: 'Uttapam, Tomato Chutney & Filter Coffee', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Roti, Aloo Matar, Dal Fry, Steamed Rice, Salad', timing: '01:00 PM - 03:00 PM' },
+    snacks: { items: 'French Fries & Tea', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Shahi Paneer, Dal Tadka, Jeera Rice, Halwa', timing: '08:00 PM - 10:00 PM' }
+  },
+  {
+    _id: 'mess-menu-1-sun',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    dayOfWeek: 'Sunday',
+    breakfast: { items: 'Puri Bhaji, Tea & Banana', timing: '08:00 AM - 10:00 AM' },
+    lunch: { items: 'Special Thali - Paneer Tikka, Veg Pulao, Naan, Dal Makhani, Ice Cream', timing: '01:00 PM - 03:30 PM' },
+    snacks: { items: 'Biscuits & Masala Tea', timing: '05:30 PM - 06:30 PM' },
+    dinner: { items: 'Roti, Mix Veg Curry, Dal, Steamed Rice, Kheer', timing: '08:00 PM - 10:00 PM' }
+  }
+];
+
+const todayISO = new Date().toISOString().split('T')[0];
+
+export let mockMealSkips = [
+  {
+    _id: 'skip-1',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    residentId: 'res-1',
+    residentName: 'Aarav Sharma',
+    roomNumber: '101',
+    date: todayISO,
+    meals: ['dinner'],
+    reason: 'Dinner out with colleagues',
+    status: 'approved',
+    createdAt: new Date().toISOString()
+  },
+  {
+    _id: 'skip-2',
+    organizationId: 'demo-org',
+    propertyId: 'demo-prop-1',
+    residentId: 'res-2',
+    residentName: 'Priya Patel',
+    roomNumber: '102',
+    date: todayISO,
+    meals: ['breakfast', 'lunch'],
+    reason: 'Traveling for weekend',
+    status: 'approved',
+    createdAt: new Date().toISOString()
+  }
+];
+
+export const getMockMessMenu = (propertyId) => {
+  const menus = mockMessMenus.filter(m => !propertyId || m.propertyId === propertyId);
+  if (menus.length === 0) {
+    return mockMessMenus;
+  }
+  return menus;
+};
+
+export const updateMockMessMenu = (propertyId, dayOfWeek, menuItems) => {
+  let existing = mockMessMenus.find(m => (!propertyId || m.propertyId === propertyId) && m.dayOfWeek === dayOfWeek);
+  if (existing) {
+    if (menuItems.breakfast) existing.breakfast = menuItems.breakfast;
+    if (menuItems.lunch) existing.lunch = menuItems.lunch;
+    if (menuItems.snacks) existing.snacks = menuItems.snacks;
+    if (menuItems.dinner) existing.dinner = menuItems.dinner;
+    return existing;
+  }
+  const newMenu = {
+    _id: `mess-menu-${Date.now()}`,
+    organizationId: 'demo-org',
+    propertyId: propertyId || 'demo-prop-1',
+    dayOfWeek,
+    breakfast: menuItems.breakfast || { items: '', timing: '08:00 AM - 10:00 AM' },
+    lunch: menuItems.lunch || { items: '', timing: '01:00 PM - 03:00 PM' },
+    snacks: menuItems.snacks || { items: '', timing: '05:30 PM - 06:30 PM' },
+    dinner: menuItems.dinner || { items: '', timing: '08:00 PM - 10:00 PM' }
+  };
+  mockMessMenus.push(newMenu);
+  return newMenu;
+};
+
+export const getMockMealSkips = (propertyId, date) => {
+  return mockMealSkips.filter(s => {
+    const matchProp = !propertyId || s.propertyId === propertyId;
+    const matchDate = !date || s.date === date;
+    return matchProp && matchDate;
+  });
+};
+
+export const toggleMockMealSkip = (propertyId, skipData) => {
+  const { residentId, residentName, roomNumber, date, meals, reason } = skipData;
+  const targetDate = date || todayISO;
+  const existingIndex = mockMealSkips.findIndex(s => (!propertyId || s.propertyId === propertyId) && s.residentId === residentId && s.date === targetDate);
+
+  if (existingIndex !== -1) {
+    if (!meals || meals.length === 0) {
+      mockMealSkips.splice(existingIndex, 1);
+      return { message: 'Meal skip cancelled', skip: null };
+    }
+    mockMealSkips[existingIndex].meals = meals;
+    if (reason) mockMealSkips[existingIndex].reason = reason;
+    return { message: 'Meal skip updated', skip: mockMealSkips[existingIndex] };
+  } else {
+    if (!meals || meals.length === 0) return { message: 'No meals specified', skip: null };
+    const newSkip = {
+      _id: `skip-${Date.now()}`,
+      organizationId: 'demo-org',
+      propertyId: propertyId || 'demo-prop-1',
+      residentId: residentId || 'res-1',
+      residentName: residentName || 'Resident',
+      roomNumber: roomNumber || 'N/A',
+      date: targetDate,
+      meals,
+      reason: reason || 'Out of PG',
+      status: 'approved',
+      createdAt: new Date().toISOString()
+    };
+    mockMealSkips.push(newSkip);
+    return { message: 'Meal skip logged successfully', skip: newSkip };
+  }
+};
+
 
 
 

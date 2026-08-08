@@ -12,8 +12,9 @@ import * as mockStore from '../mockStore.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { MaintenanceConfig } from '../models/MaintenanceConfig.js';
 import { Notification } from '../models/Notification.js';
+import { MessMenu, MealSkip } from '../models/Mess.js';
 import crypto from 'crypto';
-import Razorpay from 'razorpay';
+import PaymentService from './paymentService.js';
 
 export function formatInvoicePeriodHelper(p) {
   if (!p) return '';
@@ -234,7 +235,9 @@ export async function getDashboard(tenant, auth) {
       role: 'resident',
       upiId: org?.upiId || '',
       bankDetails: org?.bankDetails || null,
-      directSettlementEnabled: org ? org.directSettlementEnabled !== false : true,
+      directSettlementEnabled: org 
+        ? (org.gateway?.provider === 'cashfree' ? false : org.directSettlementEnabled !== false)
+        : true,
       onlineGatewayEnabled: org ? org.onlineGatewayEnabled !== false : true,
       residentDetails: {
         propertyName: prop?.name || 'N/A',
@@ -695,7 +698,7 @@ export async function createMember(tenant, data) {
  * PUT member
  */
 export async function updateMember(tenant, id, data) {
-  const { role, propertyId, roomId, bedId } = data;
+  const { role, propertyId, roomId, bedId, email } = data;
   if (!['owner', 'staff', 'resident'].includes(role)) {
     const err = new Error('A valid role is required.');
     err.status = 400;
@@ -703,7 +706,7 @@ export async function updateMember(tenant, id, data) {
   }
 
   if (!isDbConnected()) {
-    const updated = mockStore.updateMockMemberRole(id, role, propertyId, roomId, bedId);
+    const updated = mockStore.updateMockMemberRole(id, role, propertyId, roomId, bedId, email);
     if (!updated) {
       const err = new Error('Mock member not found');
       err.status = 404;
@@ -717,6 +720,40 @@ export async function updateMember(tenant, id, data) {
     const err = new Error('Member not found.');
     err.status = 404;
     throw err;
+  }
+
+  if (email && email.trim() !== '') {
+    if (membership.status !== 'invited') {
+      const err = new Error('Cannot edit email address of a registered user.');
+      err.status = 400;
+      throw err;
+    }
+
+    const newEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: newEmail });
+    if (existingUser) {
+      const existingMembership = await Membership.findOne({ 
+        organizationId: tenant.organizationId, 
+        userId: existingUser.id 
+      });
+      if (existingMembership && existingMembership._id.toString() !== id) {
+        const err = new Error('This email address is already registered in this property.');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const userToUpdate = await User.findById(membership.userId);
+    if (userToUpdate) {
+      userToUpdate.email = newEmail;
+      await userToUpdate.save();
+    }
+
+    const residentToUpdate = await Resident.findOne({ organizationId: tenant.organizationId, userId: membership.userId });
+    if (residentToUpdate) {
+      residentToUpdate.email = newEmail;
+      await residentToUpdate.save();
+    }
   }
 
   membership.role = role;
@@ -1283,10 +1320,12 @@ export async function initiateCharge(tenant, auth, paymentId) {
     }
     const mockOrderId = 'order_mock_' + Math.random().toString(36).substr(2, 9);
     mockPay.gatewayOrderId = mockOrderId;
+    mockPay.provider = 'cashfree';
     return {
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_mockkey123',
+      keyId: 'cf_mock_app_id',
       orderId: mockOrderId,
-      amount: outstanding * 100, // paise
+      paymentSessionId: 'session_mock_' + Math.random().toString(36).substr(2, 20),
+      amount: outstanding,
       currency: 'INR',
       paymentId: mockPay._id,
       isMock: true
@@ -1304,80 +1343,32 @@ export async function initiateCharge(tenant, auth, paymentId) {
     throw new Error('Payment already fully paid.');
   }
 
-  // Fetch organization profile to get linkedAccountId
+  // Fetch organization profile to get linkedAccountId and provider setting
   const org = await Organization.findById(tenant.organizationId).lean();
   if (org && org.onlineGatewayEnabled === false) {
     throw new Error('Instant online checkout is currently disabled by the property owner.');
   }
 
-  // Always use the Platform's global keys from .env
-  const rzpKeyId = process.env.RAZORPAY_KEY_ID;
-  const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
-  if (!rzpKeyId || !rzpKeySecret) {
-    // If keys are not set, return simulated response for development
-    const mockOrderId = 'order_simulated_' + Math.random().toString(36).substr(2, 9);
-    payment.gatewayOrderId = mockOrderId;
-    await payment.save();
-    return {
-      keyId: 'rzp_test_simulatedkey123',
-      orderId: mockOrderId,
-      amount: outstanding * 100,
-      currency: 'INR',
-      paymentId: payment._id,
-      isMock: true
-    };
+  const resident = await Resident.findById(payment.residentId).lean();
+  if (!resident) {
+    throw new Error('Associated resident profile not found.');
   }
 
-  const razorpay = new Razorpay({
-    key_id: rzpKeyId,
-    key_secret: rzpKeySecret
-  });
-
-  const totalAmount = Math.round(outstanding * 100); // paise
-
-  const orderPayload = {
-    amount: totalAmount,
-    currency: 'INR',
-    receipt: payment._id.toString()
-  };
-
-  // If a linked account is set, calculate the split
-  if (org && org.gateway && org.gateway.linkedAccountId) {
-    // Calculate commission (2%)
-    const commission = Math.round(totalAmount * 0.02);
-    const routeAmount = totalAmount - commission;
-
-    orderPayload.transfers = [
-      {
-        account: org.gateway.linkedAccountId,
-        amount: routeAmount,
-        currency: 'INR',
-        on_hold: false
-      }
-    ];
-  }
-
-  const order = await razorpay.orders.create(orderPayload);
-
-  payment.gatewayOrderId = order.id;
+  const orderInfo = await PaymentService.createOrder(org, payment, outstanding, resident);
+  
+  payment.gatewayOrderId = orderInfo.orderId;
+  payment.provider = org.gateway?.provider || 'none';
   await payment.save();
 
-  return {
-    keyId: rzpKeyId,
-    orderId: order.id,
-    amount: order.amount,
-    currency: order.currency,
-    paymentId: payment._id
-  };
+  return orderInfo;
 }
 
 export async function verifyOnlinePayment(tenant, auth, payload) {
-  const { razorpay_payment_id, razorpay_order_id, razorpay_signature, paymentId } = payload;
+  const { paymentId } = payload;
 
   if (tenant.organizationId === 'demo-org' || !isDbConnected()) {
     // Mock validation
-    const mockPay = mockStore.mockPayments.find(p => p.gatewayOrderId === razorpay_order_id || p._id === paymentId);
+    const mockPay = mockStore.mockPayments.find(p => p.gatewayOrderId === payload.order_id || p.gatewayOrderId === payload.razorpay_order_id || p._id === paymentId);
     if (!mockPay) {
       throw new Error('Mock payment not found.');
     }
@@ -1385,63 +1376,70 @@ export async function verifyOnlinePayment(tenant, auth, payload) {
     mockPay.status = 'paid';
     mockPay.receivedAmount = mockPay.amount;
     mockPay.method = 'online_gateway';
-    mockPay.gatewayPaymentId = razorpay_payment_id || 'pay_mock_success';
+    mockPay.gatewayPaymentId = payload.cf_payment_id || payload.razorpay_payment_id || 'pay_mock_success';
     mockPay.paidAt = new Date().toISOString();
     mockPay.transactions.push({
       amount: outstanding,
       paidAt: new Date().toISOString(),
       method: 'online_gateway',
-      referenceNumber: razorpay_payment_id || 'pay_mock_success',
-      notes: 'Paid online via Razorpay (Mock)'
+      referenceNumber: payload.cf_payment_id || payload.razorpay_payment_id || 'pay_mock_success',
+      notes: `Paid online via ${mockPay.provider || 'gateway'} (Mock)`
     });
     return { success: true, message: 'Mock payment verified successfully.', payment: mockPay };
   }
 
   // Real DB flow
+  const queryOr = [];
+  if (payload.order_id) queryOr.push({ gatewayOrderId: payload.order_id });
+  if (payload.razorpay_order_id) queryOr.push({ gatewayOrderId: payload.razorpay_order_id });
+  if (paymentId) queryOr.push({ _id: paymentId });
+
+  if (queryOr.length === 0) {
+    throw new Error('No valid payment identifiers provided.');
+  }
+
   const payment = await Payment.findOne({
-    $or: [{ gatewayOrderId: razorpay_order_id }, { _id: paymentId }],
+    $or: queryOr,
     organizationId: tenant.organizationId
   });
   if (!payment) {
     throw new Error('Payment invoice not found.');
   }
 
-  // Always verify payment signature using the platform's global Key Secret
-  const rzpKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
-  if (rzpKeySecret && razorpay_signature) {
-    // Perform cryptographic verification
-    const text = razorpay_order_id + '|' + razorpay_payment_id;
-    const generated_signature = crypto
-      .createHmac('sha256', rzpKeySecret)
-      .update(text)
-      .digest('hex');
-
-    if (generated_signature !== razorpay_signature) {
-      throw new Error('Razorpay signature verification failed.');
-    }
+  const org = await Organization.findById(tenant.organizationId).lean();
+  if (!org) {
+    throw new Error('Organization not found.');
   }
+
+  const result = await PaymentService.verifyPayment(org, payload, payment);
 
   const outstanding = payment.amount - (payment.receivedAmount || 0);
   if (outstanding > 0) {
-    payment.transactions.push({
-      amount: outstanding,
-      paidAt: new Date(),
-      method: 'online_gateway',
-      referenceNumber: razorpay_payment_id || 'simulated_txn_' + Date.now(),
-      notes: 'Paid online via Razorpay'
-    });
-    payment.receivedAmount = payment.amount;
-    payment.status = 'paid';
-    payment.method = 'online_gateway';
-    payment.gatewayPaymentId = razorpay_payment_id || 'simulated_txn_' + Date.now();
-    payment.paidAt = new Date();
-    payment.history.push({
-      action: 'payment_recorded',
-      timestamp: new Date(),
-      details: { amount: outstanding, method: 'online_gateway', referenceNumber: razorpay_payment_id }
-    });
-    await payment.save();
+    const paymentRef = result.cf_payment_id || payload.razorpay_payment_id || 'simulated_txn_' + Date.now();
+    const transactionExists = payment.transactions.some(tx => tx.referenceNumber === paymentRef);
+    if (!transactionExists) {
+      payment.transactions.push({
+        amount: outstanding,
+        paidAt: new Date(),
+        method: 'online_gateway',
+        referenceNumber: paymentRef,
+        notes: `Paid online via ${org.gateway?.provider || 'gateway'}`
+      });
+      payment.receivedAmount = payment.amount;
+      payment.status = 'paid';
+      payment.method = 'online_gateway';
+      payment.gatewayPaymentId = paymentRef;
+      payment.paidAt = new Date();
+      payment.provider = org.gateway?.provider || 'none';
+      payment.providerStatus = 'PAID';
+      payment.rawProviderReference = result.raw || null;
+      payment.history.push({
+        action: 'payment_recorded',
+        timestamp: new Date(),
+        details: { amount: outstanding, method: 'online_gateway', referenceNumber: paymentRef }
+      });
+      await payment.save();
+    }
   }
 
   return { success: true, message: 'Payment verified and recorded successfully.', payment };
@@ -1458,6 +1456,7 @@ export async function getOrganizationSettings(tenant) {
       name: 'Greenview Residency (Demo)',
       slug: 'greenview-residency-demo',
       linkedAccountId: 'acc_demo123456789',
+      gatewayProvider: 'razorpay',
       upiId: 'owner@okaxis',
       directSettlementEnabled: true,
       onlineGatewayEnabled: true,
@@ -1481,6 +1480,7 @@ export async function getOrganizationSettings(tenant) {
     name: org.name,
     slug: org.slug,
     linkedAccountId: org.gateway?.linkedAccountId || '',
+    gatewayProvider: org.gateway?.provider || 'none',
     upiId: org.upiId || '',
     directSettlementEnabled: org.directSettlementEnabled !== false,
     onlineGatewayEnabled: org.onlineGatewayEnabled !== false,
@@ -1530,10 +1530,19 @@ export async function updateOrganizationSettings(tenant, data) {
     }
   }
 
+  const provider = data.gatewayProvider !== undefined ? data.gatewayProvider : (org.gateway?.provider || 'none');
+
   if (data.linkedAccountId) {
-    const linkedAccRegex = /^acc_[a-zA-Z0-9]{14}$/;
-    if (!linkedAccRegex.test(data.linkedAccountId)) {
-      throw new Error('Invalid Razorpay Linked Account ID. Must start with "acc_" followed by exactly 14 characters (18 characters total).');
+    if (provider === 'razorpay') {
+      const linkedAccRegex = /^acc_[a-zA-Z0-9]{14}$/;
+      if (!linkedAccRegex.test(data.linkedAccountId)) {
+        throw new Error('Invalid Razorpay Linked Account ID. Must start with "acc_" followed by exactly 14 characters (18 characters total).');
+      }
+    } else if (provider === 'cashfree') {
+      const cfVendorRegex = /^[a-zA-Z0-9_-]{1,40}$/;
+      if (!cfVendorRegex.test(data.linkedAccountId)) {
+        throw new Error('Invalid Cashfree Vendor ID. Must be alphanumeric (1-40 chars), optionally containing underscores or hyphens.');
+      }
     }
   }
 
@@ -1543,11 +1552,11 @@ export async function updateOrganizationSettings(tenant, data) {
   if (data.directSettlementEnabled !== undefined) org.directSettlementEnabled = data.directSettlementEnabled;
   if (data.onlineGatewayEnabled !== undefined) org.onlineGatewayEnabled = data.onlineGatewayEnabled;
   
-  if (data.linkedAccountId !== undefined) {
+  if (data.linkedAccountId !== undefined || data.gatewayProvider !== undefined) {
     org.gateway = {
       ...org.gateway,
-      linkedAccountId: data.linkedAccountId,
-      provider: data.linkedAccountId ? 'razorpay' : 'none'
+      linkedAccountId: data.linkedAccountId !== undefined ? data.linkedAccountId : org.gateway.linkedAccountId,
+      provider: data.gatewayProvider !== undefined ? data.gatewayProvider : (data.linkedAccountId ? 'razorpay' : 'none')
     };
   }
 
@@ -1569,7 +1578,7 @@ export async function updateOrganizationSettings(tenant, data) {
     action: 'update',
     entityType: 'Organization',
     entityId: org._id,
-    details: { name: org.name, upiId: org.upiId, linkedAccountId: data.linkedAccountId, directSettlementEnabled: org.directSettlementEnabled, onlineGatewayEnabled: org.onlineGatewayEnabled }
+    details: { name: org.name, upiId: org.upiId, linkedAccountId: org.gateway?.linkedAccountId, directSettlementEnabled: org.directSettlementEnabled, onlineGatewayEnabled: org.onlineGatewayEnabled }
   });
 
   return {
@@ -1577,6 +1586,7 @@ export async function updateOrganizationSettings(tenant, data) {
     name: org.name,
     slug: org.slug,
     linkedAccountId: org.gateway?.linkedAccountId || '',
+    gatewayProvider: org.gateway?.provider || 'none',
     upiId: org.upiId || '',
     directSettlementEnabled: org.directSettlementEnabled !== false,
     onlineGatewayEnabled: org.onlineGatewayEnabled !== false,
@@ -1699,136 +1709,7 @@ export async function verifyBankAccount(tenant, data) {
   }
 }
 
-/**
- * Razorpay Webhook Handler for Enterprise Settlement Lifecycle
- */
-export async function handleRazorpayWebhook(event, payload) {
-  if (!isDbConnected()) return { status: 'mock_ignored' };
 
-  if (event === 'payment.captured' || event === 'order.paid') {
-    const paymentEntity = payload.payment?.entity;
-    const orderId = paymentEntity?.order_id;
-    const paymentId = paymentEntity?.id;
-
-    if (!orderId && !paymentId) return;
-
-    const paymentRecord = await Payment.findOne({
-      $or: [{ gatewayOrderId: orderId }, { paymentId: paymentId }, { _id: paymentEntity?.notes?.paymentId }]
-    });
-
-    if (paymentRecord && paymentRecord.status !== 'paid') {
-      const amount = paymentRecord.amount;
-      const platformFee = Math.round(amount * 0.02 * 100) / 100; // 2%
-      const ownerAmount = Math.round((amount - platformFee) * 100) / 100; // 98%
-
-      const expSettlement = new Date();
-      expSettlement.setDate(expSettlement.getDate() + 2); // 2 business days
-
-      paymentRecord.status = 'paid';
-      paymentRecord.paymentStatus = 'verified';
-      paymentRecord.settlementStatus = 'processing';
-      paymentRecord.paymentId = paymentId || paymentRecord.paymentId;
-      paymentRecord.platformFee = platformFee;
-      paymentRecord.ownerAmount = ownerAmount;
-      paymentRecord.expectedSettlementDate = expSettlement;
-      paymentRecord.receivedAmount = amount;
-      paymentRecord.method = 'online_gateway';
-      paymentRecord.paidAt = new Date();
-      paymentRecord.gatewayPaymentId = paymentId;
-
-      paymentRecord.transactions.push({
-        amount: amount,
-        paidAt: new Date(),
-        method: 'online_gateway',
-        referenceNumber: paymentId || 'webhook_cap',
-        notes: 'Paid online via Razorpay (Webhook)'
-      });
-
-      await paymentRecord.save();
-
-      // Trigger notification
-      const resident = await Resident.findById(paymentRecord.residentId).lean();
-      const residentName = resident?.name || 'Resident';
-
-      await Notification.create({
-        organizationId: paymentRecord.organizationId,
-        title: 'Rent Payment Captured',
-        message: `${residentName} has successfully paid ₹${new Intl.NumberFormat('en-IN').format(amount)} for ${paymentRecord.invoiceMonth} rent.`,
-        type: 'payment',
-        data: {
-          paymentId: paymentRecord._id,
-          amount,
-          platformFee,
-          ownerAmount,
-          residentName
-        }
-      });
-    }
-  } else if (event === 'transfer.processed') {
-    const transferEntity = payload.transfer?.entity;
-    const transferId = transferEntity?.id;
-    const paymentId = transferEntity?.payment_id;
-
-    const paymentRecord = await Payment.findOne({
-      $or: [{ paymentId: paymentId }, { transferId: transferId }]
-    });
-
-    if (paymentRecord) {
-      paymentRecord.transferId = transferId || paymentRecord.transferId;
-      paymentRecord.settlementStatus = 'processing';
-      await paymentRecord.save();
-
-      await Notification.create({
-        organizationId: paymentRecord.organizationId,
-        title: 'Settlement Initiated',
-        message: `Transfer of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount || paymentRecord.amount)} initiated via Razorpay Route.`,
-        type: 'settlement',
-        data: { paymentId: paymentRecord._id, transferId }
-      });
-    }
-  } else if (event === 'settlement.processed') {
-    const settlementEntity = payload.settlement?.entity;
-    const settlementId = settlementEntity?.id;
-
-    const payments = await Payment.find({
-      organizationId: { $exists: true },
-      settlementStatus: 'processing'
-    });
-
-    for (const paymentRecord of payments) {
-      paymentRecord.settlementStatus = 'completed';
-      paymentRecord.settledAt = new Date();
-      paymentRecord.gatewaySettlementId = settlementId;
-      await paymentRecord.save();
-
-      await Notification.create({
-        organizationId: paymentRecord.organizationId,
-        title: 'Settlement Completed',
-        message: `Funds of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount)} transferred to bank account.`,
-        type: 'settlement',
-        data: { paymentId: paymentRecord._id, settlementId }
-      });
-    }
-  } else if (event === 'transfer.failed') {
-    const transferEntity = payload.transfer?.entity;
-    const transferId = transferEntity?.id;
-
-    const paymentRecord = await Payment.findOne({ transferId });
-    if (paymentRecord) {
-      paymentRecord.settlementStatus = 'failed';
-      paymentRecord.failureReason = transferEntity?.error_description || 'Route transfer failed';
-      await paymentRecord.save();
-
-      await Notification.create({
-        organizationId: paymentRecord.organizationId,
-        title: 'Settlement Transfer Failed',
-        message: `Transfer of ₹${new Intl.NumberFormat('en-IN').format(paymentRecord.ownerAmount)} failed. Logged for reconciliation.`,
-        type: 'system',
-        data: { paymentId: paymentRecord._id, error: paymentRecord.failureReason }
-      });
-    }
-  }
-}
 
 /**
  * GET Settlement Analytics for Owner Dashboard
@@ -2130,5 +2011,103 @@ export async function approveOfflinePayment(tenant, auth, paymentId) {
 
   return { success: true, message: 'Payment successfully approved and recorded in ledger.', payment };
 }
+
+export async function getMessMenu(organizationId, propertyId) {
+  if (!isDbConnected() || organizationId === 'demo-org' || !organizationId) {
+    return mockStore.getMockMessMenu(propertyId);
+  }
+  try {
+    const menus = await MessMenu.find({ organizationId, propertyId }).lean();
+    if (!menus || menus.length === 0) {
+      return mockStore.getMockMessMenu(propertyId);
+    }
+    return menus;
+  } catch (err) {
+    return mockStore.getMockMessMenu(propertyId);
+  }
+}
+
+export async function updateMessMenu(organizationId, propertyId, dayOfWeek, menuItems) {
+  if (!isDbConnected() || organizationId === 'demo-org' || !organizationId) {
+    return mockStore.updateMockMessMenu(propertyId, dayOfWeek, menuItems);
+  }
+  try {
+    let menu = await MessMenu.findOne({ organizationId, propertyId, dayOfWeek });
+    if (menu) {
+      if (menuItems.breakfast) menu.breakfast = menuItems.breakfast;
+      if (menuItems.lunch) menu.lunch = menuItems.lunch;
+      if (menuItems.snacks) menu.snacks = menuItems.snacks;
+      if (menuItems.dinner) menu.dinner = menuItems.dinner;
+      await menu.save();
+      return menu;
+    } else {
+      menu = await MessMenu.create({
+        organizationId,
+        propertyId,
+        dayOfWeek,
+        breakfast: menuItems.breakfast || { items: '', timing: '08:00 AM - 10:00 AM' },
+        lunch: menuItems.lunch || { items: '', timing: '01:00 PM - 03:00 PM' },
+        snacks: menuItems.snacks || { items: '', timing: '05:30 PM - 06:30 PM' },
+        dinner: menuItems.dinner || { items: '', timing: '08:00 PM - 10:00 PM' }
+      });
+      return menu;
+    }
+  } catch (err) {
+    return mockStore.updateMockMessMenu(propertyId, dayOfWeek, menuItems);
+  }
+}
+
+export async function getMealSkips(organizationId, propertyId, date) {
+  if (!isDbConnected() || organizationId === 'demo-org' || !organizationId) {
+    return mockStore.getMockMealSkips(propertyId, date);
+  }
+  try {
+    const filter = { organizationId, propertyId };
+    if (date) filter.date = date;
+    return await MealSkip.find(filter).sort({ createdAt: -1 }).lean();
+  } catch (err) {
+    return mockStore.getMockMealSkips(propertyId, date);
+  }
+}
+
+export async function toggleMealSkip(organizationId, propertyId, skipData) {
+  if (!isDbConnected() || organizationId === 'demo-org' || !organizationId) {
+    return mockStore.toggleMockMealSkip(propertyId, skipData);
+  }
+  try {
+    const { residentId, residentName, roomNumber, date, meals, reason } = skipData;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    let existing = await MealSkip.findOne({ organizationId, propertyId, residentId, date: targetDate });
+
+    if (existing) {
+      if (!meals || meals.length === 0) {
+        await MealSkip.deleteOne({ _id: existing._id });
+        return { message: 'Meal skip cancelled', skip: null };
+      }
+      existing.meals = meals;
+      if (reason) existing.reason = reason;
+      await existing.save();
+      return { message: 'Meal skip updated', skip: existing };
+    } else {
+      if (!meals || meals.length === 0) return { message: 'No meals specified', skip: null };
+      const skip = await MealSkip.create({
+        organizationId,
+        propertyId,
+        residentId,
+        residentName: residentName || 'Resident',
+        roomNumber: roomNumber || 'N/A',
+        date: targetDate,
+        meals,
+        reason: reason || 'Out of PG',
+        status: 'approved'
+      });
+      return { message: 'Meal skip logged successfully', skip };
+    }
+  } catch (err) {
+    return mockStore.toggleMockMealSkip(propertyId, skipData);
+  }
+}
+
 
 

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, QrCode, Landmark, ShieldCheck, CreditCard, Loader2 } from 'lucide-react';
-import { money } from '../utils/formatters.js';
-
+import { money, formatInvoicePeriod } from '../utils/formatters.js';
 export default function ResidentPaymentModal({
   session,
   payment,

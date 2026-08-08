@@ -3,7 +3,7 @@ import {
   Bell, BedDouble, Building2, CalendarDays, ChevronDown, ChevronRight,
   IndianRupee, FileText, HelpCircle, LayoutDashboard, LogOut, Menu,
   MoreHorizontal, Plus, Search, Settings, ShieldCheck, Users, WalletCards, X,
-  Sun, Moon, Monitor, Wrench
+  Sun, Moon, Monitor, Wrench, Utensils
 } from 'lucide-react';
 import { money } from '../utils/formatters.js';
 import { fallback } from '../constants/fallbackData.js';
@@ -18,12 +18,13 @@ import ExpensesPage from './ExpensesPage.jsx';
 import ReportsPage from './ReportsPage.jsx';
 import MaintenancePage from './MaintenancePage.jsx';
 import SettingsPage from './SettingsPage.jsx';
+import MessManagementPage from './MessManagementPage.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
 import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
-  ['Payments', WalletCards], ['Expenses', IndianRupee], ['Maintenance', Wrench], ['Reports', FileText]
+  ['Payments', WalletCards], ['Expenses', IndianRupee], /* ['Mess & Food', Utensils], */ ['Maintenance', Wrench], ['Reports', FileText]
 ];
 
 const emptyData = {
@@ -52,13 +53,33 @@ export function Dashboard({ session, onLogout }) {
   const [showResidentPayModal, setShowResidentPayModal] = useState(false);
   const [paymentForResidentModal, setPaymentForResidentModal] = useState(null);
 
-  const handlePayOnline = (paymentId, amount, label) => {
-    import('../utils/razorpay.js').then(({ processOnlinePayment }) => {
-      processOnlinePayment({
-        paymentId,
+  const handlePayOnline = async (paymentId, amount, label) => {
+    setPaymentLoading(true);
+    setPaymentStatusText("Initializing gateway...");
+    try {
+      const orderResponse = await fetch(`/api/tenant/payments/${paymentId}/initiate-charge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'x-organization-id': session.organizationId
+        }
+      });
+
+      const orderData = await orderResponse.json();
+      if (!orderResponse.ok) {
+        throw new Error(orderData.message || "Failed to create order on server.");
+      }
+
+      if (!orderData.paymentSessionId) {
+        throw new Error("Online payment gateway response is invalid (missing paymentSessionId).");
+      }
+
+      const { processCashfreePaymentDirect } = await import('../utils/cashfreeDirect.js');
+      await processCashfreePaymentDirect({
+        orderData,
         session,
         amountLabel: `${label} (₹${amount})`,
-        pgName: data.property || "StayZen Residency",
         onSuccess: (msg) => {
           notify(msg);
           refreshDashboardData();
@@ -71,7 +92,11 @@ export function Dashboard({ session, onLogout }) {
           setPaymentStatusText(text);
         }
       });
-    });
+    } catch (err) {
+      notify(`Payment failed: ${err.message}`);
+      setPaymentLoading(false);
+      setPaymentStatusText('');
+    }
   };
 
   const [coords, setCoords] = useState({ top: 0, height: 0 });
@@ -383,6 +408,11 @@ export function Dashboard({ session, onLogout }) {
               session={session}
               properties={properties}
               onRefresh={refreshDashboardData}
+            />
+          ) : active === 'Mess & Food' ? (
+            <MessManagementPage
+              selectedPropertyId={selectedPropertyId}
+              session={session}
             />
           ) : active === 'Maintenance' ? (
             <MaintenancePage
