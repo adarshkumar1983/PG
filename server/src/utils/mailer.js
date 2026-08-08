@@ -69,6 +69,7 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
       const transportConfig = isGmail
         ? {
           service: 'gmail',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -78,6 +79,7 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
           host: process.env.SMTP_HOST,
           port: parseInt(process.env.SMTP_PORT || '587'),
           secure: process.env.SMTP_SECURE === 'true',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -108,6 +110,7 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
+      family: 4,
       auth: {
         user: testAccount.user,
         pass: testAccount.pass
@@ -225,6 +228,7 @@ export async function sendReceiptEmail(toEmail, toName, details) {
       const transportConfig = isGmail
         ? {
           service: 'gmail',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -234,6 +238,7 @@ export async function sendReceiptEmail(toEmail, toName, details) {
           host: process.env.SMTP_HOST,
           port: parseInt(process.env.SMTP_PORT || '587'),
           secure: process.env.SMTP_SECURE === 'true',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -262,6 +267,7 @@ export async function sendReceiptEmail(toEmail, toName, details) {
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
+      family: 4,
       auth: {
         user: testAccount.user,
         pass: testAccount.pass
@@ -342,6 +348,7 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
       const transportConfig = isGmail
         ? {
           service: 'gmail',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -351,6 +358,7 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
           host: process.env.SMTP_HOST,
           port: parseInt(process.env.SMTP_PORT || '587'),
           secure: process.env.SMTP_SECURE === 'true',
+          family: 4,
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -379,6 +387,7 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
+      family: 4,
       auth: {
         user: testAccount.user,
         pass: testAccount.pass
