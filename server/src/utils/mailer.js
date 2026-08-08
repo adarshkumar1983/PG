@@ -11,6 +11,120 @@ if (!fs.existsSync(sentEmailsDir)) {
   fs.mkdirSync(sentEmailsDir, { recursive: true });
 }
 
+/**
+ * Unified email sending helper
+ */
+async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) {
+  // 1. Unconditionally write locally as an HTML file so users can inspect it
+  const sanitizedEmail = (toEmail || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+  const localFileName = `${localFileNamePrefix}-${sanitizedEmail}-${Date.now()}.html`;
+  const localFilePath = path.join(sentEmailsDir, localFileName);
+  fs.writeFileSync(localFilePath, emailHtml);
+  console.log(`[SMTP SIMULATION] Email HTML written to: ${localFilePath}`);
+
+  // 2. Try HTTP API (Resend) - Bypass SMTP blocks on Render completely
+  if (process.env.RESEND_API_KEY) {
+    try {
+      console.log('[RESEND API] Attempting to send email via Resend HTTP API...');
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`
+        },
+        body: JSON.stringify({
+          from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+          to: toEmail,
+          subject: subject,
+          html: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully. ID: ${result.id}`);
+        return { success: true, localFilePath };
+      }
+      console.error('[RESEND ERROR] Failed to send email via Resend API:', result);
+    } catch (error) {
+      console.error('[RESEND ERROR] Connection error to Resend API:', error);
+    }
+  }
+
+  // 3. Try standard SMTP if configured
+  const isPlaceholder = !process.env.SMTP_USER ||
+    process.env.SMTP_USER.includes('your-email') ||
+    !process.env.SMTP_PASS ||
+    process.env.SMTP_PASS === 'your-gmail-app-password' ||
+    process.env.SMTP_PASS === 'abcdefghijklmnop';
+
+  const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
+
+  if (hasSmtpConfig) {
+    try {
+      console.log(`[SMTP] Attempting to connect to ${process.env.SMTP_HOST}...`);
+      const transportConfig = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        family: 4, // Force IPv4
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      };
+
+      const transporter = nodemailer.createTransport(transportConfig);
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"StayZen" <${process.env.SMTP_USER}>`,
+        to: toEmail,
+        subject: subject,
+        html: emailHtml
+      });
+      console.log(`[SMTP SUCCESS] Email sent to ${toEmail} successfully.`);
+      return { success: true, localFilePath };
+    } catch (error) {
+      console.error('[SMTP ERROR] Failed to send email via SMTP:', error.message);
+    }
+  }
+
+  // 4. Fallback to Ethereal Sandbox if SMTP fails or is unconfigured
+  try {
+    console.log('[SMTP SIMULATION] Creating Ethereal Test Account...');
+    const testAccount = await nodemailer.createTestAccount();
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      family: 4,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: '"StayZen" <no-reply@stayzen.com>',
+      to: toEmail,
+      subject: `[SIMULATED] ${subject}`,
+      html: emailHtml
+    });
+
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    console.log(`[SMTP SIMULATION] Simulated email successfully sent!`);
+    console.log(`[SMTP SIMULATION] Preview URL: ${previewUrl}`);
+    return { success: true, previewUrl, localFilePath };
+  } catch (err) {
+    console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err.message);
+    return { success: false, localFilePath };
+  }
+}
+
 export async function sendInviteEmail(toEmail, toName, role, organizationName, inviteLink) {
   const emailHtml = `<!DOCTYPE html>
 <html>
@@ -48,108 +162,34 @@ export async function sendInviteEmail(toEmail, toName, role, organizationName, i
 </body>
 </html>`;
 
-  // Always write locally as an HTML file so developers/users can inspect it directly
-  const sanitizedEmail = (toEmail || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
-  const localFileName = `invite-${sanitizedEmail}-${Date.now()}.html`;
-  const localFilePath = path.join(sentEmailsDir, localFileName);
-  fs.writeFileSync(localFilePath, emailHtml);
-  console.log(`[SMTP SIMULATION] Invitation HTML written to: ${localFilePath}`);
-
-  const isPlaceholder = !process.env.SMTP_USER ||
-    process.env.SMTP_USER.includes('your-email') ||
-    !process.env.SMTP_PASS ||
-    process.env.SMTP_PASS === 'your-gmail-app-password' ||
-    process.env.SMTP_PASS === 'abcdefghijklmnop';
-
-  const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
-
-  if (hasSmtpConfig) {
-    try {
-      const transportConfig = {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        family: 4,
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      };
-
-      const transporter = nodemailer.createTransport(transportConfig);
-
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"StayZen" <${process.env.SMTP_USER}>`,
-        to: toEmail,
-        subject: `You've been invited to join ${organizationName} on StayZen`,
-        html: emailHtml
-      });
-      console.log(`[SMTP SUCCESS] Invitation email sent to ${toEmail} successfully.`);
-      return { success: true, localFilePath };
-    } catch (error) {
-      console.error('[SMTP ERROR] Failed to send email via configured SMTP:', error);
-      // Fall through to Ethereal simulator if configured SMTP fails
-    }
-  }
-
-  // Fallback to Ethereal developer sandbox for rich email simulation
-  try {
-    console.log('[SMTP SIMULATION] Creating Ethereal Test Account...');
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      family: 4,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
-      }
-    });
-
-    const info = await transporter.sendMail({
-      from: '"StayZen" <no-reply@stayzen.com>',
-      to: toEmail,
-      subject: `[SIMULATED] You've been invited to join ${organizationName} on StayZen`,
-      html: emailHtml
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[SMTP SIMULATION] Simulated email successfully sent!`);
-    console.log(`[SMTP SIMULATION] Preview URL: ${previewUrl}`);
-    return { success: true, previewUrl, localFilePath };
-  } catch (err) {
-    console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err);
-    return { success: false, localFilePath };
-  }
+  return await sendMailHelper(
+    toEmail,
+    `You've been invited to join ${organizationName} on StayZen`,
+    emailHtml,
+    'invite'
+  );
 }
 
-export async function sendReceiptEmail(toEmail, toName, details) {
-  const { amount, purpose, invoiceMonth, method, referenceNumber, paidAt, organizationName } = details;
-  const formattedAmount = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
-  const formattedDate = new Date(paidAt || new Date()).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const paymentMethodLabel = method ? method.toUpperCase().replace('_', ' ') : 'OFFLINE';
-
+export async function sendReceiptEmail(toEmail, toName, paymentAmount, purpose, invoiceMonth, organizationName, refNo) {
+  const formattedAmount = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paymentAmount);
   const emailHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Payment Receipt Confirmed</title>
+  <title>Payment Receipt</title>
   <style>
     body { font-family: 'DM Sans', Arial, sans-serif; background-color: #f4f6f3; color: #1b2724; margin: 0; padding: 20px; }
     .card { max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e4e9e5; border-radius: 13px; overflow: hidden; box-shadow: 0 4px 12px rgba(27, 39, 36, 0.05); }
     .header { background: #0b4438; padding: 30px; text-align: center; color: #ffffff; }
     .header h1 { margin: 0; font-size: 24px; font-weight: 800; font-family: 'Manrope', Arial, sans-serif; }
     .content { padding: 40px 30px; }
-    .content p { font-size: 15px; line-height: 1.6; color: #53605c; margin: 0 0 24px; }
-    .receipt-box { background-color: #fafbfa; border: 1px solid #e4e9e5; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
-    .receipt-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
-    .receipt-row:last-child { margin-bottom: 0; border-top: 1px solid #e4e9e5; padding-top: 12px; font-weight: bold; }
-    .label { color: #85908c; }
-    .value { color: #1b2724; text-align: right; }
+    .content h2 { color: #0b4438; font-size: 20px; font-weight: 700; margin: 0 0 20px 0; text-align: center; }
+    .content p { font-size: 15px; line-height: 1.6; color: #53605c; margin: 0 0 24px; text-align: center; }
+    .receipt-details { background-color: #fafbfa; border: 1px solid #e4e9e5; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .detail-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
+    .detail-row:last-child { margin-bottom: 0; border-top: 1px solid #e4e9e5; padding-top: 12px; margin-top: 12px; font-weight: 700; }
+    .detail-label { color: #85908c; }
+    .detail-value { color: #1b2724; }
     .footer { background: #fafbfa; padding: 20px; text-align: center; font-size: 11px; color: #85908c; border-top: 1px solid #e4e9e5; }
   </style>
 </head>
@@ -159,121 +199,54 @@ export async function sendReceiptEmail(toEmail, toName, details) {
       <h1>StayZen</h1>
     </div>
     <div class="content">
-      <p>Hello <strong>${toName}</strong>,</p>
-      <p>Your reported offline payment has been verified and marked as <strong>PAID</strong> by the PG management of <strong>${organizationName}</strong>.</p>
+      <h2>Payment Receipt</h2>
+      <p>Thank you for your payment. Here are your transaction details:</p>
       
-      <div class="receipt-box">
-        <h3 style="margin: 0 0 16px; font-size: 15px; color: #0b4438;">Payment Receipt Details</h3>
-        <div class="receipt-row">
-          <span class="label">Invoice Purpose</span>
-          <span class="value" style="text-transform: capitalize;">${purpose || 'Rent'}</span>
+      <div class="receipt-details">
+        <div class="detail-row">
+          <span class="detail-label">Received From</span>
+          <span class="detail-value">${toName}</span>
         </div>
-        <div class="receipt-row">
-          <span class="label">Invoice Month</span>
-          <span class="value">${invoiceMonth}</span>
+        <div class="detail-row">
+          <span class="detail-label">Organization</span>
+          <span class="detail-value">${organizationName}</span>
         </div>
-        <div class="receipt-row">
-          <span class="label">Payment Method</span>
-          <span class="value">${paymentMethodLabel}</span>
+        <div class="detail-row">
+          <span class="detail-label">Billing Month</span>
+          <span class="detail-value">${invoiceMonth}</span>
         </div>
-        <div class="receipt-row">
-          <span class="label">Reference UTR / ID</span>
-          <span class="value" style="font-family: monospace;">${referenceNumber || 'N/A'}</span>
+        <div class="detail-row">
+          <span class="detail-label">Purpose</span>
+          <span class="detail-value" style="text-transform: capitalize;">${purpose || 'Rent'}</span>
         </div>
-        <div class="receipt-row">
-          <span class="label">Date Paid</span>
-          <span class="value">${formattedDate}</span>
+        ${refNo ? `
+        <div class="detail-row">
+          <span class="detail-label">Reference Number</span>
+          <span class="detail-value" style="font-family: monospace;">${refNo}</span>
         </div>
-        <div class="receipt-row" style="font-size: 16px;">
-          <span class="label" style="color: #0b4438;">Amount Paid</span>
-          <span class="value" style="color: #10b981;">${formattedAmount}</span>
+        ` : ''}
+        <div class="detail-row">
+          <span class="detail-label">Amount Paid</span>
+          <span class="detail-value" style="color: #17644f; font-size: 16px;">${formattedAmount}</span>
         </div>
       </div>
       
-      <p style="text-align: center; font-size: 14px; color: #53605c;">Thank you for your prompt payment!</p>
+      <p style="font-size: 13px; color: #85908c; margin-bottom: 0;">This receipt is generated automatically upon payment verification.</p>
     </div>
     <div class="footer">
-      This is an automated confirmation email from StayZen.<br>
-      Please do not reply directly to this email.
+      Thank you for staying with us!<br>
+      StayZen PG Management.
     </div>
   </div>
 </body>
 </html>`;
 
-  // Always write locally
-  const sanitizedEmail = (toEmail || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
-  const localFileName = `receipt-${sanitizedEmail}-${Date.now()}.html`;
-  const localFilePath = path.join(sentEmailsDir, localFileName);
-  fs.writeFileSync(localFilePath, emailHtml);
-  console.log(`[SMTP SIMULATION] Receipt HTML written to: ${localFilePath}`);
-
-  const isPlaceholder = !process.env.SMTP_USER ||
-    process.env.SMTP_USER.includes('your-email') ||
-    !process.env.SMTP_PASS ||
-    process.env.SMTP_PASS === 'your-gmail-app-password' ||
-    process.env.SMTP_PASS === 'abcdefghijklmnop';
-
-  const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
-
-  if (hasSmtpConfig) {
-    try {
-      const transportConfig = {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        family: 4,
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      };
-
-      const transporter = nodemailer.createTransport(transportConfig);
-
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"StayZen" <${process.env.SMTP_USER}>`,
-        to: toEmail,
-        subject: `Payment Receipt: ${formattedAmount} for ${invoiceMonth} ${purpose || 'Rent'}`,
-        html: emailHtml
-      });
-      console.log(`[SMTP SUCCESS] Receipt email sent to ${toEmail} successfully.`);
-      return { success: true, localFilePath };
-    } catch (error) {
-      console.error('[SMTP ERROR] Failed to send receipt email via SMTP:', error);
-    }
-  }
-
-  // Fallback to Ethereal
-  try {
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      family: 4,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
-      }
-    });
-
-    const info = await transporter.sendMail({
-      from: '"StayZen" <no-reply@stayzen.com>',
-      to: toEmail,
-      subject: `[SIMULATED] Payment Receipt: ${formattedAmount} for ${invoiceMonth} ${purpose || 'Rent'}`,
-      html: emailHtml
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[SMTP SIMULATION] Simulated receipt sent! Preview URL: ${previewUrl}`);
-    return { success: true, previewUrl, localFilePath };
-  } catch (err) {
-    console.error('[SMTP SIMULATION ERROR] Ethereal receipt failed:', err);
-    return { success: false, localFilePath };
-  }
+  return await sendMailHelper(
+    toEmail,
+    `Payment Receipt: ${formattedAmount} for ${invoiceMonth} ${purpose || 'Rent'}`,
+    emailHtml,
+    'receipt'
+  );
 }
 
 export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
@@ -281,7 +254,7 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Reset Your StayZen Password</title>
+  <title>Reset your StayZen password</title>
   <style>
     body { font-family: 'DM Sans', Arial, sans-serif; background-color: #f4f6f3; color: #1b2724; margin: 0; padding: 20px; }
     .card { max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e4e9e5; border-radius: 13px; overflow: hidden; box-shadow: 0 4px 12px rgba(27, 39, 36, 0.05); }
@@ -300,92 +273,22 @@ export async function sendResetPasswordEmail(toEmail, toName, resetLink) {
     </div>
     <div class="content">
       <p>Hello <strong>${toName}</strong>,</p>
-      <p>We received a request to reset the password for your StayZen account.</p>
-      <p>Click the button below to set a new password. This link is valid for 1 hour:</p>
+      <p>We received a request to reset your password. Click the button below to choose a new password. This link is valid for 1 hour:</p>
       <a href="${resetLink}" class="btn" target="_blank">Reset Password</a>
       <p style="font-size: 12px; color: #85908c; margin-top: 20px;">If the button doesn't work, you can copy and paste this link into your browser:<br><span style="word-break: break-all; color: #0b4438;">${resetLink}</span></p>
     </div>
     <div class="footer">
-      This email was sent by StayZen PG Management.<br>
-      If you did not request a password reset, please ignore this email.
+      This password reset link was requested for your StayZen account.<br>
+      If you did not request this, you can safely ignore this email.
     </div>
   </div>
 </body>
 </html>`;
 
-  // Always write locally as an HTML file so developers/users can inspect it directly
-  const sanitizedEmail = (toEmail || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
-  const localFileName = `reset-password-${sanitizedEmail}-${Date.now()}.html`;
-  const localFilePath = path.join(sentEmailsDir, localFileName);
-  fs.writeFileSync(localFilePath, emailHtml);
-  console.log(`[SMTP SIMULATION] Password reset HTML written to: ${localFilePath}`);
-
-  const isPlaceholder = !process.env.SMTP_USER ||
-    process.env.SMTP_USER.includes('your-email') ||
-    !process.env.SMTP_PASS ||
-    process.env.SMTP_PASS === 'your-gmail-app-password' ||
-    process.env.SMTP_PASS === 'abcdefghijklmnop';
-
-  const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
-
-  if (hasSmtpConfig) {
-    try {
-      const transportConfig = {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        family: 4,
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      };
-
-      const transporter = nodemailer.createTransport(transportConfig);
-
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"StayZen" <${process.env.SMTP_USER}>`,
-        to: toEmail,
-        subject: 'Reset your StayZen password',
-        html: emailHtml
-      });
-      console.log(`[SMTP SUCCESS] Reset password email sent to ${toEmail} successfully.`);
-      return { success: true, localFilePath };
-    } catch (error) {
-      console.error('[SMTP ERROR] Failed to send reset password email via configured SMTP:', error);
-    }
-  }
-
-  // Fallback to Ethereal developer sandbox for rich email simulation
-  try {
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      family: 4,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
-      }
-    });
-
-    const info = await transporter.sendMail({
-      from: '"StayZen" <no-reply@stayzen.com>',
-      to: toEmail,
-      subject: `[SIMULATED] Reset your StayZen password`,
-      html: emailHtml
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[SMTP SIMULATION] Simulated reset password email successfully sent! Preview URL: ${previewUrl}`);
-    return { success: true, previewUrl, localFilePath };
-  } catch (err) {
-    console.error('[SMTP SIMULATION ERROR] Ethereal reset password simulation failed:', err);
-    return { success: false, localFilePath };
-  }
+  return await sendMailHelper(
+    toEmail,
+    'Reset your StayZen password',
+    emailHtml,
+    'reset-password'
+  );
 }
-
