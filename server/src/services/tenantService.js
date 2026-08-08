@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import PaymentService from './paymentService.js';
 
 const getAppUrl = () => {
-  return process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+  return process.env.APP_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173';
 };
 
 export function formatInvoicePeriodHelper(p) {

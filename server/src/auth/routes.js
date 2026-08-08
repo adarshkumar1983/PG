@@ -15,7 +15,7 @@ const signAccess = user => jwt.sign({ sub: user.id, platformRole: user.platformR
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 const getAppUrl = () => {
-  return process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+  return process.env.APP_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173';
 };
 
 router.post('/register', async (req, res) => {
