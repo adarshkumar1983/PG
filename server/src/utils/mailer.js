@@ -24,6 +24,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   console.log(`[SMTP SIMULATION] Email HTML written to: ${localFilePath}`);
 
   // 2. Try HTTP API (Resend) - Bypass SMTP blocks on Render completely
+  let resendSandboxError = false;
   if (process.env.RESEND_API_KEY) {
     try {
       console.log('[RESEND API] Attempting to send email via Resend HTTP API...');
@@ -49,8 +50,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       if (result.statusCode === 403 && result.name === 'validation_error') {
         console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (e.g., unverified domain or sandbox recipient restriction):');
         console.warn(`[RESEND WARNING] ${result.message}`);
-        console.warn('[RESEND WARNING] Skipping SMTP fallback as this is a configuration/validation issue. Simulated email is saved locally.');
-        return { success: true, isSimulated: true, localFilePath };
+        resendSandboxError = true;
       }
     } catch (error) {
       console.error('[RESEND ERROR] Connection error to Resend API:', error);
@@ -67,7 +67,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
   let smtpBlocked = false;
 
-  if (hasSmtpConfig) {
+  if (hasSmtpConfig && !resendSandboxError) {
     try {
       console.log(`[SMTP] Attempting to connect to ${process.env.SMTP_HOST}...`);
       
@@ -137,65 +137,64 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     }
   }
 
-  if (smtpBlocked) {
-    console.log('[SMTP SIMULATION] Skipping Ethereal fallback as outbound SMTP ports are blocked on this host. Simulated email is saved locally.');
-    return { success: true, isSimulated: true, localFilePath };
-  }
+  // 4. Fallback to Ethereal Sandbox if SMTP fails, is unconfigured, or if Resend failed due to sandbox constraints
+  const shouldTryEthereal = !hasSmtpConfig || smtpBlocked || resendSandboxError;
 
-  // 4. Fallback to Ethereal Sandbox if SMTP fails or is unconfigured
-  try {
-    console.log('[SMTP SIMULATION] Creating Ethereal Test Account...');
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      family: 4,
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 5000,
-      lookup: (hostname, options, callback) => {
-        let cb = callback;
-        let opts = { family: 4 };
-        if (typeof options === 'function') {
-          cb = options;
-        } else if (options && typeof options === 'object') {
-          opts = { ...options, family: 4 };
+  if (shouldTryEthereal) {
+    try {
+      console.log('[SMTP SIMULATION] Creating Ethereal Test Account...');
+      const testAccount = await nodemailer.createTestAccount();
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 2525, // Use port 2525 to bypass Render SMTP outbound blocks on 25/465/587
+        secure: false,
+        family: 4,
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        lookup: (hostname, options, callback) => {
+          let cb = callback;
+          let opts = { family: 4 };
+          if (typeof options === 'function') {
+            cb = options;
+          } else if (options && typeof options === 'object') {
+            opts = { ...options, family: 4 };
+          }
+          return dns.lookup(hostname, opts, cb);
+        },
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass
         }
-        return dns.lookup(hostname, opts, cb);
-      },
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
+      });
+
+      const info = await transporter.sendMail({
+        from: '"StayZen" <no-reply@stayzen.com>',
+        to: toEmail,
+        subject: `[SIMULATED] ${subject}`,
+        html: emailHtml
+      });
+
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      console.log(`[SMTP SIMULATION] Simulated email successfully sent!`);
+      console.log(`[SMTP SIMULATION] Preview URL: ${previewUrl}`);
+      return { success: true, previewUrl, localFilePath };
+    } catch (err) {
+      console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err.message);
+      console.error('[SMTP SIMULATION ERROR DETAILS]:', err);
+      if (
+        err.message.includes('timeout') ||
+        err.message.includes('Timeout') ||
+        err.code === 'ENETUNREACH' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EADDRNOTAVAIL' ||
+        err.code === 'ECONNREFUSED'
+      ) {
+        console.warn('[SMTP SIMULATION WARNING] Outbound SMTP port 587/465/2525 is blocked. Simulated email is saved locally.');
+        return { success: true, isSimulated: true, localFilePath };
       }
-    });
-
-    const info = await transporter.sendMail({
-      from: '"StayZen" <no-reply@stayzen.com>',
-      to: toEmail,
-      subject: `[SIMULATED] ${subject}`,
-      html: emailHtml
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[SMTP SIMULATION] Simulated email successfully sent!`);
-    console.log(`[SMTP SIMULATION] Preview URL: ${previewUrl}`);
-    return { success: true, previewUrl, localFilePath };
-  } catch (err) {
-    console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err.message);
-    console.error('[SMTP SIMULATION ERROR DETAILS]:', err);
-    if (
-      err.message.includes('timeout') ||
-      err.message.includes('Timeout') ||
-      err.code === 'ENETUNREACH' ||
-      err.code === 'ETIMEDOUT' ||
-      err.code === 'EADDRNOTAVAIL' ||
-      err.code === 'ECONNREFUSED'
-    ) {
-      console.warn('[SMTP SIMULATION WARNING] Outbound SMTP port 587/465 is blocked. Simulated email is saved locally.');
-      return { success: true, isSimulated: true, localFilePath };
+      return { success: false, localFilePath };
     }
-    return { success: false, localFilePath };
   }
 }
 
