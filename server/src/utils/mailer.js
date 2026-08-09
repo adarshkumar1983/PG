@@ -46,6 +46,12 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         return { success: true, localFilePath };
       }
       console.error('[RESEND ERROR] Failed to send email via Resend API:', result);
+      if (result.statusCode === 403 && result.name === 'validation_error') {
+        console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (e.g., unverified domain or sandbox recipient restriction):');
+        console.warn(`[RESEND WARNING] ${result.message}`);
+        console.warn('[RESEND WARNING] Skipping SMTP fallback as this is a configuration/validation issue. Simulated email is saved locally.');
+        return { success: true, isSimulated: true, localFilePath };
+      }
     } catch (error) {
       console.error('[RESEND ERROR] Connection error to Resend API:', error);
     }
