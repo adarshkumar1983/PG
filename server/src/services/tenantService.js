@@ -499,8 +499,15 @@ export async function getMembers(tenant) {
   const residents = await Resident.find(filter).lean();
   const residentMap = new Map(residents.map(r => [r.userId?.toString(), r]));
 
+  const accessSecret = process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
+
   return memberships.map(m => {
     const resDoc = m.role === 'resident' ? residentMap.get(m.userId?._id?.toString()) : null;
+    let inviteLink;
+    if (m.status === 'invited') {
+      const inviteToken = jwt.sign({ membershipId: m._id.toString(), email: m.userId?.email || m.userId?.mobile }, accessSecret, { expiresIn: '7d' });
+      inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
+    }
     return {
       id: m._id,
       name: m.userId?.name,
@@ -510,7 +517,8 @@ export async function getMembers(tenant) {
       status: m.status,
       propertyId: resDoc?.propertyId,
       roomId: resDoc?.roomId,
-      bedId: resDoc?.bedId
+      bedId: resDoc?.bedId,
+      inviteLink
     };
   });
 }

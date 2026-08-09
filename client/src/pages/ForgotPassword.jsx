@@ -13,6 +13,7 @@ export function ForgotPassword({ onSwitchView }) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [devResetLink, setDevResetLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
 
@@ -20,6 +21,7 @@ export function ForgotPassword({ onSwitchView }) {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setDevResetLink('');
     if (!email) return setError('Please enter your email address.');
     setLoading(true);
     try {
@@ -31,6 +33,9 @@ export function ForgotPassword({ onSwitchView }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Unable to request password reset.');
       setSuccess(result.message || 'A password reset link has been sent to your email.');
+      if (result.devResetLink) {
+        setDevResetLink(result.devResetLink);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -112,19 +117,27 @@ export function ForgotPassword({ onSwitchView }) {
               )}
 
               {success && (
-                <motion.div
-                  className="form-error"
-                  role="alert"
-                  aria-live="assertive"
-                  initial={{ opacity: 0, height: 0, y: -10 }}
-                  animate={{ opacity: 1, height: 'auto', y: 0 }}
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  transition={springTransition}
-                  style={{ background: '#e3f1e9', color: '#287154', borderColor: '#bdd6c9' }}
-                >
-                  <Check size={16} />
-                  <span>{success}</span>
-                </motion.div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+                  <motion.div
+                    className="form-error"
+                    role="alert"
+                    aria-live="assertive"
+                    initial={{ opacity: 0, height: 0, y: -10 }}
+                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -10 }}
+                    transition={springTransition}
+                    style={{ background: '#e3f1e9', color: '#287154', borderColor: '#bdd6c9', margin: 0 }}
+                  >
+                    <Check size={16} />
+                    <span>{success}</span>
+                  </motion.div>
+                  {devResetLink && (
+                    <div style={{ padding: '12px', background: 'var(--color-primary-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-primary)', textAlign: 'left' }}>
+                      <p style={{ margin: '0 0 6px 0', fontWeight: '700' }}>Staging/Testing reset link:</p>
+                      <a href={devResetLink} style={{ color: 'var(--color-primary)', wordBreak: 'break-all', fontWeight: 'bold' }}>{devResetLink}</a>
+                    </div>
+                  )}
+                </div>
               )}
             </AnimatePresence>
 

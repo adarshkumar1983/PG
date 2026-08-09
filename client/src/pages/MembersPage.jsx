@@ -459,7 +459,15 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className={`member-status ${m.status}`}>{m.status}</i>
                   {m.status === 'invited' && (
-                    <button type="button" onClick={() => handleResendInvite(m)} title="Reset & Resend invitation link" style={{ background: 'var(--color-warning-bg)', border: '1px solid var(--border-color)', color: 'var(--color-warning)', borderRadius: '6px', cursor: 'pointer', fontSize: '9px', fontWeight: '600', padding: '2px 6px', whiteSpace: 'nowrap', height: '18px', display: 'flex', alignItems: 'center' }}>Resend</button>
+                    <>
+                      <button type="button" onClick={() => handleResendInvite(m)} title="Reset & Resend invitation link" style={{ background: 'var(--color-warning-bg)', border: '1px solid var(--border-color)', color: 'var(--color-warning)', borderRadius: '6px', cursor: 'pointer', fontSize: '9px', fontWeight: '600', padding: '2px 6px', whiteSpace: 'nowrap', height: '18px', display: 'flex', alignItems: 'center' }}>Resend</button>
+                      {m.inviteLink && (
+                        <button type="button" onClick={() => {
+                          navigator.clipboard.writeText(m.inviteLink);
+                          triggerToast('Copied invitation link to clipboard!');
+                        }} title="Copy invitation link" style={{ background: 'var(--color-primary-bg)', border: '1px solid var(--border-color)', color: 'var(--color-primary)', borderRadius: '6px', cursor: 'pointer', fontSize: '9px', fontWeight: '600', padding: '2px 6px', whiteSpace: 'nowrap', height: '18px', display: 'flex', alignItems: 'center' }}>Copy Link</button>
+                      )}
+                    </>
                   )}
                 </div>
               </span>

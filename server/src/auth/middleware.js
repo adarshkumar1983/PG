@@ -5,14 +5,14 @@ import { rolePermissions } from './permissions.js';
 const secret = () => process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
 
 export function authenticate(req, res, next) {
-  const token = req.headers.authorization?.startsWith('Bearer ') && req.headers.authorization.slice(7);
+  const token = (req.headers.authorization?.startsWith('Bearer ') && req.headers.authorization.slice(7)) || req.query.token;
   if (!token) return res.status(401).json({ message: 'Authentication required.' });
   try { req.auth = jwt.verify(token, secret()); next(); }
   catch { return res.status(401).json({ message: 'Invalid or expired access token.' }); }
 }
 
 export async function resolveTenant(req, res, next) {
-  const organizationId = req.headers['x-organization-id'];
+  const organizationId = req.headers['x-organization-id'] || req.query.organizationId;
   if (!organizationId) return res.status(400).json({ message: 'x-organization-id is required.' });
   if (req.auth.sub === 'demo-owner' && organizationId === 'demo-org') {
     req.tenant = { organizationId, role: 'owner', permissions: rolePermissions.owner }; return next();

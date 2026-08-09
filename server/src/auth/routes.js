@@ -85,7 +85,7 @@ router.post('/forgot-password', async (req, res) => {
         const token = jwt.sign({ sub: 'demo-owner', email: email.toLowerCase(), type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
         const resetLink = `${getAppUrl()}/?resetToken=${token}`;
         await sendResetPasswordEmail(email.toLowerCase(), 'Adarsh Kumar', resetLink);
-        return res.json({ message: 'Simulated password reset email sent successfully! Please check sent_emails/ folder.' });
+        return res.json({ message: 'Simulated password reset email sent successfully! Please check sent_emails/ folder.', devResetLink: resetLink });
       }
       return res.status(404).json({ message: 'Email not found in demo mode.' });
     }
@@ -99,7 +99,7 @@ router.post('/forgot-password', async (req, res) => {
     const resetLink = `${getAppUrl()}/?resetToken=${token}`;
     await sendResetPasswordEmail(user.email, user.name, resetLink);
 
-    res.json({ message: 'Password reset link sent successfully.' });
+    res.json({ message: 'Password reset link sent successfully.', devResetLink: resetLink });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ message: 'An error occurred while processing your request.' });

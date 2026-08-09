@@ -78,6 +78,9 @@ router.get('/settlements/analytics', authorizePaymentsRead, tenantController.get
 router.get('/notifications', authorizePaymentsRead, tenantController.getNotifications);
 router.put('/notifications/:id/read', authorizePaymentsRead, tenantController.markNotificationRead);
 
+router.get('/sent-emails', authorize(permissions.STAFF_MANAGE), tenantController.getSentEmails);
+router.get('/sent-emails/:filename', authorize(permissions.STAFF_MANAGE), tenantController.getSentEmailContent);
+
 router.route('/mess/menu')
   .get(authorizePaymentsRead, tenantController.getMessMenu)
   .post(authorize(permissions.MANAGE_PG), tenantController.updateMessMenu);

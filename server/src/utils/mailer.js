@@ -59,21 +59,44 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     process.env.SMTP_PASS === 'abcdefghijklmnop';
 
   const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
+  let smtpBlocked = false;
 
   if (hasSmtpConfig) {
     try {
       console.log(`[SMTP] Attempting to connect to ${process.env.SMTP_HOST}...`);
+      
+      let resolvedHost = process.env.SMTP_HOST;
+      try {
+        const lookupResult = await dns.promises.lookup(process.env.SMTP_HOST, { family: 4 });
+        if (lookupResult && lookupResult.address) {
+          resolvedHost = lookupResult.address;
+          console.log(`[SMTP DNS] Resolved hostname ${process.env.SMTP_HOST} to IPv4 address ${resolvedHost}`);
+        }
+      } catch (dnsErr) {
+        console.warn(`[SMTP DNS WARNING] Failed to resolve SMTP host via IPv4:`, dnsErr.message);
+      }
+
       const transportConfig = {
-        host: process.env.SMTP_HOST,
+        host: resolvedHost,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
         family: 4, // Force IPv4
         connectionTimeout: 5000,
         greetingTimeout: 5000,
         socketTimeout: 5000,
+        tls: {
+          servername: process.env.SMTP_HOST,
+          rejectUnauthorized: false
+        },
         lookup: (hostname, options, callback) => {
-          options.family = 4;
-          return dns.lookup(hostname, options, callback);
+          let cb = callback;
+          let opts = { family: 4 };
+          if (typeof options === 'function') {
+            cb = options;
+          } else if (options && typeof options === 'object') {
+            opts = { ...options, family: 4 };
+          }
+          return dns.lookup(hostname, opts, cb);
         },
         auth: {
           user: process.env.SMTP_USER,
@@ -92,7 +115,25 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       return { success: true, localFilePath };
     } catch (error) {
       console.error('[SMTP ERROR] Failed to send email via SMTP:', error.message);
+      console.error('[SMTP ERROR DETAILS]:', error);
+      if (
+        error.message.includes('timeout') ||
+        error.message.includes('Timeout') ||
+        error.code === 'ENETUNREACH' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'EADDRNOTAVAIL' ||
+        error.code === 'ECONNREFUSED'
+      ) {
+        console.warn('[SMTP WARNING] Outbound SMTP port 587/465 is blocked by your hosting provider (e.g., Render).');
+        console.warn('[SMTP WARNING] To send real emails, set RESEND_API_KEY in your Render environment variables to use the HTTPS-based Resend API.');
+        smtpBlocked = true;
+      }
     }
+  }
+
+  if (smtpBlocked) {
+    console.log('[SMTP SIMULATION] Skipping Ethereal fallback as outbound SMTP ports are blocked on this host. Simulated email is saved locally.');
+    return { success: true, isSimulated: true, localFilePath };
   }
 
   // 4. Fallback to Ethereal Sandbox if SMTP fails or is unconfigured
@@ -108,8 +149,14 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       greetingTimeout: 5000,
       socketTimeout: 5000,
       lookup: (hostname, options, callback) => {
-        options.family = 4;
-        return dns.lookup(hostname, options, callback);
+        let cb = callback;
+        let opts = { family: 4 };
+        if (typeof options === 'function') {
+          cb = options;
+        } else if (options && typeof options === 'object') {
+          opts = { ...options, family: 4 };
+        }
+        return dns.lookup(hostname, opts, cb);
       },
       auth: {
         user: testAccount.user,
@@ -130,6 +177,18 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     return { success: true, previewUrl, localFilePath };
   } catch (err) {
     console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err.message);
+    console.error('[SMTP SIMULATION ERROR DETAILS]:', err);
+    if (
+      err.message.includes('timeout') ||
+      err.message.includes('Timeout') ||
+      err.code === 'ENETUNREACH' ||
+      err.code === 'ETIMEDOUT' ||
+      err.code === 'EADDRNOTAVAIL' ||
+      err.code === 'ECONNREFUSED'
+    ) {
+      console.warn('[SMTP SIMULATION WARNING] Outbound SMTP port 587/465 is blocked. Simulated email is saved locally.');
+      return { success: true, isSimulated: true, localFilePath };
+    }
     return { success: false, localFilePath };
   }
 }

@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   HelpCircle,
   Wallet,
-  Check
+  Check,
+  Mail
 } from 'lucide-react';
 import { evaluateNameMatch } from '../utils/nameMatcher.js';
 
@@ -567,6 +568,15 @@ export default function SettingsPage({ session }) {
           >
             <Percent size={16} />
             <span>Online Gateway</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-link ${activeTab === 'emails' ? 'active' : ''}`}
+            onClick={() => setActiveTab('emails')}
+          >
+            <Mail size={16} />
+            <span>Email Logs</span>
           </button>
 
           <div style={{ marginTop: '24px', padding: '16px', borderRadius: '14px', background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
@@ -1194,8 +1204,162 @@ export default function SettingsPage({ session }) {
             </div>
           )}
 
+          {activeTab === 'emails' && (
+            <EmailLogsPanel session={session} />
+          )}
+
         </form>
       </div>
+    </div>
+  );
+}
+
+function EmailLogsPanel({ session }) {
+  const [emails, setEmails] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEmail, setSelectedEmail] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const fetchEmails = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/tenant/sent-emails', {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'x-organization-id': session.organizationId
+        }
+      });
+      const data = await response.json();
+      setEmails(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching email logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmails();
+  }, []);
+
+  const filtered = emails.filter(e => 
+    e.recipient.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    e.type.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="settings-card fade-in-up" style={{ minHeight: '400px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#edf4f1', color: 'var(--green)', display: 'grid', placeItems: 'center' }}>
+            <Mail size={20} />
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <h3 style={{ margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Simulated Email Logs</h3>
+            <p style={{ margin: '0', fontSize: '12px', color: 'var(--muted)', fontWeight: '500' }}>Inspect outbound emails in this staging sandbox.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={fetchEmails}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--card-bg)', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Filter by recipient or type..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
+        />
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: '12px' }}>
+          <Loader2 className="spinner" size={24} style={{ color: 'var(--green)' }} />
+          <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Loading simulated emails...</span>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
+          <Mail size={32} style={{ opacity: 0.3, marginBottom: '12px' }} />
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>No simulated emails found</p>
+          <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--muted)' }}>Outbound emails will appear here once triggered.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filtered.map(email => (
+            <div
+              key={email.filename}
+              style={{ padding: '14px', border: '1px solid var(--border)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: 'var(--card-bg)', transition: 'transform 0.1s ease', cursor: 'pointer' }}
+              onClick={() => setSelectedEmail(email)}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                  {email.type === 'invite' ? 'WorkSpace Invitation' : email.type === 'reset-password' ? 'Password Reset Link' : 'Payment Receipt'}
+                </span>
+                <span style={{ fontSize: '12px', color: 'var(--muted)', wordBreak: 'break-all' }}>
+                  To: <b>{email.recipient}</b>
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                  {new Date(email.sentAt).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                style={{ fontSize: '11px', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEmail(email);
+                }}
+              >
+                Inspect
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedEmail && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '650px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '90vh', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ textAlign: 'left' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Email Sandbox Inspector</h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: 'var(--muted)' }}>To: {selectedEmail.recipient}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEmail(null)}
+                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 'bold' }}
+              >
+                &times;
+              </button>
+            </div>
+            <div style={{ flex: 1, background: '#f4f6f3', position: 'relative' }}>
+              <iframe
+                title="Email Preview"
+                src={`/api/tenant/sent-emails/${selectedEmail.filename}?token=${session.accessToken}&organizationId=${session.organizationId}`}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setSelectedEmail(null)}
+                style={{ padding: '8px 16px', borderRadius: '8px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

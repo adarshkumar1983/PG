@@ -1,5 +1,11 @@
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as tenantService from '../services/tenantService.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sentEmailsDir = path.resolve(__dirname, '../../sent_emails');
 
 /**
  * GET dashboard statistics
@@ -270,6 +276,52 @@ export const toggleMealSkip = asyncHandler(async (req, res) => {
   const propertyId = req.body.propertyId || req.headers['x-property-id'];
   const result = await tenantService.toggleMealSkip(req.tenant?.id || 'demo-org', propertyId, req.body);
   res.json(result);
+});
+
+/**
+ * GET / List simulated emails
+ */
+export const getSentEmails = asyncHandler(async (req, res) => {
+  if (!fs.existsSync(sentEmailsDir)) {
+    return res.json([]);
+  }
+  const files = fs.readdirSync(sentEmailsDir);
+  const emails = [];
+  for (const file of files) {
+    if (file.endsWith('.html')) {
+      const filePath = path.join(sentEmailsDir, file);
+      const stat = fs.statSync(filePath);
+      // Format: prefix-sanitizedEmail-timestamp.html
+      const parts = file.replace('.html', '').split('-');
+      const timestamp = parseInt(parts.pop() || '0');
+      const recipient = parts.pop() || 'unknown';
+      const type = parts.join('-');
+      emails.push({
+        filename: file,
+        type,
+        recipient: recipient.replace(/_/g, '@'),
+        sentAt: new Date(timestamp).toISOString(),
+        timestamp
+      });
+    }
+  }
+  emails.sort((a, b) => b.timestamp - a.timestamp);
+  res.json(emails);
+});
+
+/**
+ * GET / View single simulated email HTML content
+ */
+export const getSentEmailContent = asyncHandler(async (req, res) => {
+  const { filename } = req.params;
+  const safeFilename = path.basename(filename);
+  const filePath = path.join(sentEmailsDir, safeFilename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ message: 'Email file not found.' });
+  }
+  const html = fs.readFileSync(filePath, 'utf8');
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
 });
 
 
