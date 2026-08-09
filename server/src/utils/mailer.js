@@ -52,16 +52,22 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
 
   // 2. Try Brevo (Sendinblue) HTTP API - 300 free emails/day to ANY recipient without a custom domain!
   if (process.env.BREVO_API_KEY) {
+    const brevoKey = process.env.BREVO_API_KEY.trim();
+    if (brevoKey.startsWith('xsmtpsib-')) {
+      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
+      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
+    }
     try {
       console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'api-key': process.env.BREVO_API_KEY
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'api-key': brevoKey
         },
         body: JSON.stringify({
-          sender: { name: 'StayZen', email: process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
+          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
           to: [{ email: toEmail }],
           subject: subject,
           htmlContent: emailHtml
