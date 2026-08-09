@@ -13,6 +13,21 @@ if (!fs.existsSync(sentEmailsDir)) {
 }
 
 /**
+ * Extract action URLs from email HTML
+ */
+function extractActionLinks(html) {
+  const links = [];
+  const hrefRegex = /href=["'](https?:\/\/[^"']+)["']/g;
+  let match;
+  while ((match = hrefRegex.exec(html)) !== null) {
+    if (!links.includes(match[1])) {
+      links.push(match[1]);
+    }
+  }
+  return links;
+}
+
+/**
  * Unified email sending helper
  */
 async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) {
@@ -23,7 +38,47 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   fs.writeFileSync(localFilePath, emailHtml);
   console.log(`[SMTP SIMULATION] Email HTML written to: ${localFilePath}`);
 
-  // 2. Try HTTP API (Resend) - Bypass SMTP blocks on Render completely
+  // Prominently log action links (e.g., invitation links) so developers/admins can easily grab them from console
+  const actionLinks = extractActionLinks(emailHtml);
+  console.log('\n======================================================================');
+  console.log(`[STAYZEN EMAIL & INVITE LOG]`);
+  console.log(`To: ${toEmail}`);
+  console.log(`Subject: ${subject}`);
+  if (actionLinks.length > 0) {
+    console.log(`Direct Link(s):`);
+    actionLinks.forEach(link => console.log(`  👉 ${link}`));
+  }
+  console.log('======================================================================\n');
+
+  // 2. Try Brevo (Sendinblue) HTTP API - 300 free emails/day to ANY recipient without a custom domain!
+  if (process.env.BREVO_API_KEY) {
+    try {
+      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': process.env.BREVO_API_KEY
+        },
+        body: JSON.stringify({
+          sender: { name: 'StayZen', email: process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
+        return { success: true, localFilePath };
+      }
+      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
+    } catch (error) {
+      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
+    }
+  }
+
+  // 3. Try HTTP API (Resend) - Bypass SMTP blocks on Render completely
   let resendSandboxError = false;
   if (process.env.RESEND_API_KEY) {
     try {
@@ -46,11 +101,46 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully. ID: ${result.id}`);
         return { success: true, localFilePath };
       }
+      
       console.error('[RESEND ERROR] Failed to send email via Resend API:', result);
+      
       if (result.statusCode === 403 && result.name === 'validation_error') {
-        console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (e.g., unverified domain or sandbox recipient restriction):');
+        console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (Sandbox Mode restriction):');
         console.warn(`[RESEND WARNING] ${result.message}`);
         resendSandboxError = true;
+
+        // Try extracting owner email from Resend message (e.g. adarshrajput1914@gmail.com)
+        const match = result.message?.match(/to your own email address \(([^)]+)\)/i) || result.message?.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        const ownerEmail = match ? match[1] : (process.env.SMTP_USER || process.env.ADMIN_EMAIL);
+
+        if (ownerEmail && ownerEmail !== toEmail) {
+          console.log(`[RESEND SANDBOX FORWARD] Re-routing sandbox email for testing to account owner (${ownerEmail})...`);
+          try {
+            const redirectResponse = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.RESEND_API_KEY}`
+              },
+              body: JSON.stringify({
+                from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+                to: ownerEmail,
+                subject: `[TEST FORWARD to ${toEmail}] ${subject}`,
+                html: `<div style="padding: 12px; background: #fff3cd; color: #856404; border: 1px solid #ffeba2; margin-bottom: 20px; border-radius: 6px; font-family: sans-serif;">
+                  <strong>Resend Sandbox Notice:</strong> Original recipient was <code>${toEmail}</code>.<br>
+                  Forwarded to account owner <code>${ownerEmail}</code> because Resend is using unverified domain (<code>onboarding@resend.dev</code>).
+                </div>` + emailHtml
+              })
+            });
+            const redirectResult = await redirectResponse.json();
+            if (redirectResponse.ok) {
+              console.log(`[RESEND SANDBOX SUCCESS] Email successfully delivered to owner (${ownerEmail}) via Resend. ID: ${redirectResult.id}`);
+              return { success: true, forwardedTo: ownerEmail, localFilePath };
+            }
+          } catch (redirectErr) {
+            console.error('[RESEND SANDBOX ERROR] Failed forwarding to owner:', redirectErr.message);
+          }
+        }
       }
     } catch (error) {
       console.error('[RESEND ERROR] Connection error to Resend API:', error);
@@ -65,6 +155,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     process.env.SMTP_PASS === 'abcdefghijklmnop';
 
   const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
+  const isCloudHost = !!(process.env.RENDER || process.env.RENDER_EXTERNAL_URL);
   let smtpBlocked = false;
 
   if (hasSmtpConfig && !resendSandboxError) {
@@ -82,14 +173,15 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         console.warn(`[SMTP DNS WARNING] Failed to resolve SMTP host via IPv4:`, dnsErr.message);
       }
 
+      const timeoutVal = isCloudHost ? 2500 : 5000;
       const transportConfig = {
         host: resolvedHost,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
         family: 4, // Force IPv4
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
+        connectionTimeout: timeoutVal,
+        greetingTimeout: timeoutVal,
+        socketTimeout: timeoutVal,
         tls: {
           servername: process.env.SMTP_HOST,
           rejectUnauthorized: false
@@ -140,18 +232,18 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   // 4. Fallback to Ethereal Sandbox if SMTP fails, is unconfigured, or if Resend failed due to sandbox constraints
   const shouldTryEthereal = !hasSmtpConfig || smtpBlocked || resendSandboxError;
 
-  if (shouldTryEthereal) {
+  if (shouldTryEthereal && !isCloudHost) {
     try {
       console.log('[SMTP SIMULATION] Creating Ethereal Test Account...');
       const testAccount = await nodemailer.createTestAccount();
       const transporter = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
-        port: 2525, // Use port 2525 to bypass Render SMTP outbound blocks on 25/465/587
+        port: 2525,
         secure: false,
         family: 4,
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
+        connectionTimeout: 3000,
+        greetingTimeout: 3000,
+        socketTimeout: 3000,
         lookup: (hostname, options, callback) => {
           let cb = callback;
           let opts = { family: 4 };
@@ -181,7 +273,6 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       return { success: true, previewUrl, localFilePath };
     } catch (err) {
       console.error('[SMTP SIMULATION ERROR] Ethereal simulation failed:', err.message);
-      console.error('[SMTP SIMULATION ERROR DETAILS]:', err);
       if (
         err.message.includes('timeout') ||
         err.message.includes('Timeout') ||
@@ -196,6 +287,9 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       return { success: false, localFilePath };
     }
   }
+
+  console.warn('[EMAIL SYSTEM] Outbound email saved locally and logged to console.');
+  return { success: true, isSimulated: true, localFilePath };
 }
 
 export async function sendInviteEmail(toEmail, toName, role, organizationName, inviteLink) {
