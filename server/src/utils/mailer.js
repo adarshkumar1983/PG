@@ -58,10 +58,11 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     process.env.SMTP_PASS === 'abcdefghijklmnop';
 
   const hasSmtpConfig = process.env.SMTP_HOST && !isPlaceholder;
-  const isCloudHost = !!(process.env.RENDER || process.env.RENDER_EXTERNAL_URL);
-  let smtpBlocked = false;
+  const isCloudHost = !!(process.env.RENDER || process.env.RENDER_EXTERNAL_URL || process.env.NODE_ENV === 'production');
 
-  if (hasSmtpConfig) {
+  // On Cloud Hosts like Render, TCP SMTP (ports 587/465) is blocked by firewall.
+  // Bypass TCP SMTP on Cloud Hosts to avoid 5-second connection timeouts, and use HTTPS APIs directly.
+  if (hasSmtpConfig && !isCloudHost) {
     try {
       console.log(`[SMTP] Attempting to connect to ${process.env.SMTP_HOST}...`);
       
@@ -76,15 +77,14 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         console.warn(`[SMTP DNS WARNING] Failed to resolve SMTP host via IPv4:`, dnsErr.message);
       }
 
-      const timeoutVal = isCloudHost ? 2500 : 5000;
       const transportConfig = {
         host: resolvedHost,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
         family: 4, // Force IPv4
-        connectionTimeout: timeoutVal,
-        greetingTimeout: timeoutVal,
-        socketTimeout: timeoutVal,
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
         tls: {
           servername: process.env.SMTP_HOST,
           rejectUnauthorized: false
@@ -116,56 +116,12 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       return { success: true, localFilePath };
     } catch (error) {
       console.error('[SMTP ERROR] Failed to send email via SMTP:', error.message);
-      console.error('[SMTP ERROR DETAILS]:', error);
-      if (
-        error.message.includes('timeout') ||
-        error.message.includes('Timeout') ||
-        error.code === 'ENETUNREACH' ||
-        error.code === 'ETIMEDOUT' ||
-        error.code === 'EADDRNOTAVAIL' ||
-        error.code === 'ECONNREFUSED'
-      ) {
-        console.warn('[SMTP WARNING] Outbound SMTP port 587/465 is blocked by hosting provider.');
-        smtpBlocked = true;
-      }
     }
+  } else if (hasSmtpConfig && isCloudHost) {
+    console.log('[SMTP SKIPPED] Cloud host detected (Render). Skipping TCP SMTP port 587/465 to prevent firewall timeout.');
   }
 
-  // 3. Fallback to Brevo (Sendinblue) HTTP API
-  if (process.env.BREVO_API_KEY) {
-    const brevoKey = process.env.BREVO_API_KEY.trim();
-    if (brevoKey.startsWith('xsmtpsib-')) {
-      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
-      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
-    }
-    try {
-      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'api-key': brevoKey
-        },
-        body: JSON.stringify({
-          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
-          to: [{ email: toEmail }],
-          subject: subject,
-          htmlContent: emailHtml
-        })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
-        return { success: true, localFilePath };
-      }
-      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
-    } catch (error) {
-      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
-    }
-  }
-
-  // 4. Fallback to Resend HTTP API
+  // 3. Try Resend HTTP API first on Cloud Hosts (or fallback) - bypasses SMTP blocks on Render completely
   let resendSandboxError = false;
   if (process.env.RESEND_API_KEY) {
     try {
@@ -185,7 +141,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       });
       const result = await response.json();
       if (response.ok) {
-        console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully. ID: ${result.id}`);
+        console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully via Resend API. ID: ${result.id}`);
         return { success: true, localFilePath };
       }
       
@@ -234,8 +190,42 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     }
   }
 
-  // 4. Fallback to Ethereal Sandbox if SMTP fails, is unconfigured, or if Resend failed due to sandbox constraints
-  const shouldTryEthereal = !hasSmtpConfig || smtpBlocked || resendSandboxError;
+  // 4. Try Brevo HTTP API
+  if (process.env.BREVO_API_KEY) {
+    const brevoKey = process.env.BREVO_API_KEY.trim();
+    if (brevoKey.startsWith('xsmtpsib-')) {
+      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
+      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
+    }
+    try {
+      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'api-key': brevoKey
+        },
+        body: JSON.stringify({
+          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || 'onboarding@resend.dev' },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
+        return { success: true, localFilePath };
+      }
+      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
+    } catch (error) {
+      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
+    }
+  }
+
+  // 5. Fallback to Ethereal Sandbox if SMTP fails, is unconfigured, or if Resend failed due to sandbox constraints
+  const shouldTryEthereal = !hasSmtpConfig || resendSandboxError;
 
   if (shouldTryEthereal && !isCloudHost) {
     try {
