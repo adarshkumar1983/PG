@@ -121,7 +121,41 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
     console.log('[SMTP SKIPPED] Cloud host detected (Render). Skipping TCP SMTP port 587/465 to prevent firewall timeout.');
   }
 
-  // 3. Try Resend HTTP API first on Cloud Hosts (or fallback) - bypasses SMTP blocks on Render completely
+  // 3. Try Brevo HTTP API (300 free emails/day to ANY recipient address, no sandbox restrictions)
+  if (process.env.BREVO_API_KEY) {
+    const brevoKey = process.env.BREVO_API_KEY.trim();
+    if (brevoKey.startsWith('xsmtpsib-')) {
+      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
+      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
+    }
+    try {
+      console.log(`[BREVO API] Sending email directly to recipient ${toEmail}...`);
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'api-key': brevoKey
+        },
+        body: JSON.stringify({
+          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO SUCCESS] Email sent directly to target recipient ${toEmail}. Message ID: ${result.messageId}`);
+        return { success: true, localFilePath };
+      }
+      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
+    } catch (error) {
+      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
+    }
+  }
+
+  // 4. Fallback to Resend HTTP API
   let resendSandboxError = false;
   if (process.env.RESEND_API_KEY) {
     try {
@@ -187,40 +221,6 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
       }
     } catch (error) {
       console.error('[RESEND ERROR] Connection error to Resend API:', error);
-    }
-  }
-
-  // 4. Try Brevo HTTP API
-  if (process.env.BREVO_API_KEY) {
-    const brevoKey = process.env.BREVO_API_KEY.trim();
-    if (brevoKey.startsWith('xsmtpsib-')) {
-      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
-      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
-    }
-    try {
-      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'api-key': brevoKey
-        },
-        body: JSON.stringify({
-          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || 'onboarding@resend.dev' },
-          to: [{ email: toEmail }],
-          subject: subject,
-          htmlContent: emailHtml
-        })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
-        return { success: true, localFilePath };
-      }
-      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
-    } catch (error) {
-      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
     }
   }
 
