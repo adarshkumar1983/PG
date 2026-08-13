@@ -138,7 +138,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
           'api-key': brevoKey
         },
         body: JSON.stringify({
-          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
+          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || 'techadarshrajput1914@gmail.com' },
           to: [{ email: toEmail }],
           subject: subject,
           htmlContent: emailHtml
