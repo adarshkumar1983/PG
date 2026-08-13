@@ -3,3 +3,6 @@ dist
 .env
 .DS_Store
 npm-debug.log*
+server/sent_emails/
+sent_emails/
+

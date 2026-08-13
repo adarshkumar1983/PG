@@ -50,110 +50,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   }
   console.log('======================================================================\n');
 
-  // 2. Try Brevo (Sendinblue) HTTP API - 300 free emails/day to ANY recipient without a custom domain!
-  if (process.env.BREVO_API_KEY) {
-    const brevoKey = process.env.BREVO_API_KEY.trim();
-    if (brevoKey.startsWith('xsmtpsib-')) {
-      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
-      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
-    }
-    try {
-      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'api-key': brevoKey
-        },
-        body: JSON.stringify({
-          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
-          to: [{ email: toEmail }],
-          subject: subject,
-          htmlContent: emailHtml
-        })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
-        return { success: true, localFilePath };
-      }
-      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
-    } catch (error) {
-      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
-    }
-  }
-
-  // 3. Try HTTP API (Resend) - Bypass SMTP blocks on Render completely
-  let resendSandboxError = false;
-  if (process.env.RESEND_API_KEY) {
-    try {
-      console.log('[RESEND API] Attempting to send email via Resend HTTP API...');
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`
-        },
-        body: JSON.stringify({
-          from: process.env.SMTP_FROM || 'onboarding@resend.dev',
-          to: toEmail,
-          subject: subject,
-          html: emailHtml
-        })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully. ID: ${result.id}`);
-        return { success: true, localFilePath };
-      }
-      
-      console.error('[RESEND ERROR] Failed to send email via Resend API:', result);
-      
-      if (result.statusCode === 403 && result.name === 'validation_error') {
-        console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (Sandbox Mode restriction):');
-        console.warn(`[RESEND WARNING] ${result.message}`);
-        resendSandboxError = true;
-
-        // Try extracting owner email from Resend message (e.g. adarshrajput1914@gmail.com)
-        const match = result.message?.match(/to your own email address \(([^)]+)\)/i) || result.message?.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-        const ownerEmail = match ? match[1] : (process.env.SMTP_USER || process.env.ADMIN_EMAIL);
-
-        if (ownerEmail && ownerEmail !== toEmail) {
-          console.log(`[RESEND SANDBOX FORWARD] Re-routing sandbox email for testing to account owner (${ownerEmail})...`);
-          try {
-            const redirectResponse = await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${process.env.RESEND_API_KEY}`
-              },
-              body: JSON.stringify({
-                from: process.env.SMTP_FROM || 'onboarding@resend.dev',
-                to: ownerEmail,
-                subject: `[TEST FORWARD to ${toEmail}] ${subject}`,
-                html: `<div style="padding: 12px; background: #fff3cd; color: #856404; border: 1px solid #ffeba2; margin-bottom: 20px; border-radius: 6px; font-family: sans-serif;">
-                  <strong>Resend Sandbox Notice:</strong> Original recipient was <code>${toEmail}</code>.<br>
-                  Forwarded to account owner <code>${ownerEmail}</code> because Resend is using unverified domain (<code>onboarding@resend.dev</code>).
-                </div>` + emailHtml
-              })
-            });
-            const redirectResult = await redirectResponse.json();
-            if (redirectResponse.ok) {
-              console.log(`[RESEND SANDBOX SUCCESS] Email successfully delivered to owner (${ownerEmail}) via Resend. ID: ${redirectResult.id}`);
-              return { success: true, forwardedTo: ownerEmail, localFilePath };
-            }
-          } catch (redirectErr) {
-            console.error('[RESEND SANDBOX ERROR] Failed forwarding to owner:', redirectErr.message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[RESEND ERROR] Connection error to Resend API:', error);
-    }
-  }
-
-  // 3. Try standard SMTP if configured
+  // 2. Try standard SMTP first if configured (e.g., Gmail SMTP with App Password)
   const isPlaceholder = !process.env.SMTP_USER ||
     process.env.SMTP_USER.includes('your-email') ||
     !process.env.SMTP_PASS ||
@@ -164,7 +61,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
   const isCloudHost = !!(process.env.RENDER || process.env.RENDER_EXTERNAL_URL);
   let smtpBlocked = false;
 
-  if (hasSmtpConfig && !resendSandboxError) {
+  if (hasSmtpConfig) {
     try {
       console.log(`[SMTP] Attempting to connect to ${process.env.SMTP_HOST}...`);
       
@@ -215,7 +112,7 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         subject: subject,
         html: emailHtml
       });
-      console.log(`[SMTP SUCCESS] Email sent to ${toEmail} successfully.`);
+      console.log(`[SMTP SUCCESS] Email sent to ${toEmail} successfully via SMTP (${process.env.SMTP_HOST}).`);
       return { success: true, localFilePath };
     } catch (error) {
       console.error('[SMTP ERROR] Failed to send email via SMTP:', error.message);
@@ -228,10 +125,112 @@ async function sendMailHelper(toEmail, subject, emailHtml, localFileNamePrefix) 
         error.code === 'EADDRNOTAVAIL' ||
         error.code === 'ECONNREFUSED'
       ) {
-        console.warn('[SMTP WARNING] Outbound SMTP port 587/465 is blocked by your hosting provider (e.g., Render).');
-        console.warn('[SMTP WARNING] To send real emails, set RESEND_API_KEY in your Render environment variables to use the HTTPS-based Resend API.');
+        console.warn('[SMTP WARNING] Outbound SMTP port 587/465 is blocked by hosting provider.');
         smtpBlocked = true;
       }
+    }
+  }
+
+  // 3. Fallback to Brevo (Sendinblue) HTTP API
+  if (process.env.BREVO_API_KEY) {
+    const brevoKey = process.env.BREVO_API_KEY.trim();
+    if (brevoKey.startsWith('xsmtpsib-')) {
+      console.warn('[BREVO WARNING] BREVO_API_KEY starts with "xsmtpsib-", which is an SMTP key. Brevo HTTP API requires an API key starting with "xkeysib-".');
+      console.warn('[BREVO WARNING] Generate an API Key under Brevo Dashboard -> SMTP & API -> API Keys tab.');
+    }
+    try {
+      console.log('[BREVO API] Attempting to send email via Brevo HTTP API...');
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'api-key': brevoKey
+        },
+        body: JSON.stringify({
+          sender: { name: 'StayZen', email: process.env.BREVO_SENDER || process.env.SMTP_USER || 'adarshrajput1914@gmail.com' },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO SUCCESS] Email sent to ${toEmail} successfully. Message ID: ${result.messageId}`);
+        return { success: true, localFilePath };
+      }
+      console.error('[BREVO ERROR] Failed to send email via Brevo API:', result);
+    } catch (error) {
+      console.error('[BREVO ERROR] Connection error to Brevo API:', error);
+    }
+  }
+
+  // 4. Fallback to Resend HTTP API
+  let resendSandboxError = false;
+  if (process.env.RESEND_API_KEY) {
+    try {
+      console.log('[RESEND API] Attempting to send email via Resend HTTP API...');
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`
+        },
+        body: JSON.stringify({
+          from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+          to: toEmail,
+          subject: subject,
+          html: emailHtml
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        console.log(`[RESEND SUCCESS] Email sent to ${toEmail} successfully. ID: ${result.id}`);
+        return { success: true, localFilePath };
+      }
+      
+      console.error('[RESEND ERROR] Failed to send email via Resend API:', result);
+      
+      if (result.statusCode === 403 && result.name === 'validation_error') {
+        console.warn('[RESEND WARNING] Outbound email was blocked by Resend validation rules (Sandbox Mode restriction):');
+        console.warn(`[RESEND WARNING] ${result.message}`);
+        resendSandboxError = true;
+
+        // Try extracting owner email from Resend message
+        const match = result.message?.match(/to your own email address \(([^)]+)\)/i) || result.message?.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        const ownerEmail = match ? match[1] : (process.env.SMTP_USER || process.env.ADMIN_EMAIL);
+
+        if (ownerEmail && ownerEmail !== toEmail) {
+          console.log(`[RESEND SANDBOX FORWARD] Re-routing sandbox email for testing to account owner (${ownerEmail})...`);
+          try {
+            const redirectResponse = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.RESEND_API_KEY}`
+              },
+              body: JSON.stringify({
+                from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+                to: ownerEmail,
+                subject: `[TEST FORWARD to ${toEmail}] ${subject}`,
+                html: `<div style="padding: 12px; background: #fff3cd; color: #856404; border: 1px solid #ffeba2; margin-bottom: 20px; border-radius: 6px; font-family: sans-serif;">
+                  <strong>Resend Sandbox Notice:</strong> Original recipient was <code>${toEmail}</code>.<br>
+                  Forwarded to account owner <code>${ownerEmail}</code> because Resend is using unverified domain (<code>onboarding@resend.dev</code>).
+                </div>` + emailHtml
+              })
+            });
+            const redirectResult = await redirectResponse.json();
+            if (redirectResponse.ok) {
+              console.log(`[RESEND SANDBOX SUCCESS] Email successfully delivered to owner (${ownerEmail}) via Resend. ID: ${redirectResult.id}`);
+              return { success: true, forwardedTo: ownerEmail, localFilePath };
+            }
+          } catch (redirectErr) {
+            console.error('[RESEND SANDBOX ERROR] Failed forwarding to owner:', redirectErr.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[RESEND ERROR] Connection error to Resend API:', error);
     }
   }
 
