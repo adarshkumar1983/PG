@@ -21,6 +21,7 @@ import SettingsPage from './SettingsPage.jsx';
 import MessManagementPage from './MessManagementPage.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
 import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
+import GlobalSearchModal from '../components/GlobalSearchModal.jsx';
 import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
 import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
@@ -50,10 +51,23 @@ export function Dashboard({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [modal, setModal] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentStatusText, setPaymentStatusText] = useState('');
   const [showResidentPayModal, setShowResidentPayModal] = useState(false);
   const [paymentForResidentModal, setPaymentForResidentModal] = useState(null);
+
+  // Global Keyboard Shortcut (⌘K / Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handlePayOnline = async (paymentId, amount, label) => {
     setPaymentLoading(true);
@@ -350,10 +364,21 @@ export function Dashboard({ session, onLogout }) {
       <main>
         <header>
           <button className="menu-button" onClick={() => setMenuOpen(true)}><Menu /></button>
-          <div className="search">
+          <div
+            className="search"
+            onClick={() => setSearchOpen(true)}
+            style={{ cursor: 'pointer' }}
+            title="Search workspace (⌘K)"
+          >
             <Search size={18} />
-            <input placeholder="Search residents, rooms, payments..." />
-            <kbd>⌘ K</kbd>
+            <input
+              placeholder="Search residents, rooms, payments..."
+              readOnly
+              onClick={() => setSearchOpen(true)}
+              onFocus={() => setSearchOpen(true)}
+              style={{ cursor: 'pointer' }}
+            />
+            <kbd onClick={() => setSearchOpen(true)}>⌘ K</kbd>
           </div>
           <NotificationCenter session={session} />
 
@@ -828,6 +853,17 @@ export function Dashboard({ session, onLogout }) {
           </button>
         </div>
       )}
+
+      <GlobalSearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        session={session}
+        userRole={data.role || session.user?.role || 'owner'}
+        onNavigate={(page) => {
+          setActive(page);
+          setSearchOpen(false);
+        }}
+      />
     </div>
   );
 }
