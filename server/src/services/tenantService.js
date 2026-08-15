@@ -927,7 +927,13 @@ export async function getPayments(tenant, auth) {
   if (!isDbConnected()) return mockStore.getMockPayments(tenant.organizationId, tenant.role === 'resident');
   const query = { organizationId: tenant.organizationId };
   if (tenant.role === 'resident' && auth) {
-    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).select('_id').lean();
+    let resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).select('_id').lean();
+    if (!resident) {
+      const u = await User.findById(auth.sub).select('email').lean();
+      if (u?.email) {
+        resident = await Resident.findOne({ organizationId: tenant.organizationId, email: u.email }).select('_id').lean();
+      }
+    }
     if (!resident) return [];
     query.residentId = resident._id;
   }

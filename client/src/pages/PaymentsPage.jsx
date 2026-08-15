@@ -140,6 +140,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     setTimeout(() => setToast(''), 3000);
   };
 
+  const isResident = userRole === 'resident';
+
   const loadData = (force = false) => {
     const fetchPay = fetchWithCache('/api/tenant/payments', session, {
       force,
@@ -147,6 +149,16 @@ export default function PaymentsPage({ session, properties = [], members = [], u
         if (Array.isArray(payData)) setPayments(payData);
       }
     });
+
+    if (isResident) {
+      fetchPay
+        .then((payData) => {
+          if (Array.isArray(payData)) setPayments(payData);
+        })
+        .catch(err => console.error("Error loading payments list:", err))
+        .finally(() => setLoading(false));
+      return;
+    }
 
     const fetchRes = fetchWithCache('/api/tenant/residents', session, {
       force,
@@ -168,7 +180,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     loadData();
   }, [session]);
 
-  // Compute stats dynamically
+  // Compute stats dynamically for owner/staff
   const stats = useMemo(() => {
     let collectedToday = 0;
     let collectedMonth = 0;
@@ -215,14 +227,37 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     return { collectedToday, collectedMonth, outstanding, totalRevenue };
   }, [payments]);
 
-  // Filter payments
+  // Compute resident-specific metrics
+  const residentStats = useMemo(() => {
+    let totalPaid = 0;
+    let pendingDues = 0;
+    let securityDeposit = 0;
+    let totalInvoices = payments.length;
+
+    payments.forEach(p => {
+      totalPaid += p.receivedAmount || (p.status === 'paid' ? p.amount : 0);
+      if (p.purpose === 'security_deposit') {
+        securityDeposit += p.amount || 0;
+      }
+      if (['due', 'pending', 'partially_paid'].includes(p.status)) {
+        pendingDues += Math.max(0, (p.amount || 0) - (p.receivedAmount || 0));
+      }
+    });
+
+    return { totalPaid, pendingDues, securityDeposit, totalInvoices };
+  }, [payments]);
+
+  // Filter payments safely
   const filteredPayments = useMemo(() => {
     return payments.filter(p => {
       const resName = p.residentId?.name || p.name || 'Resident';
       const refNum = p.referenceNumber || '';
+      const invMonth = p.invoiceMonth || '';
+      const purpose = p.purpose || '';
 
       const matchSearch = resName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.invoiceMonth.includes(searchQuery) ||
+        invMonth.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        purpose.toLowerCase().includes(searchQuery.toLowerCase()) ||
         refNum.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchMethod = methodFilter === 'all' ? true : p.method === methodFilter;
@@ -332,13 +367,13 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     <div className="payments-page">
       <div className="setup-heading">
         <div>
-          <p className="eyebrow">Financial Ledger</p>
-          <h1>Payments Ledger</h1>
-          <p>Track cash, card, UPI, bank transfers, and online settlement status in a single unified ledger.</p>
+          <p className="eyebrow">{isResident ? 'My Invoices & Receipts' : 'Financial Ledger'}</p>
+          <h1>{isResident ? 'My Payments' : 'Payments Ledger'}</h1>
+          <p>{isResident ? 'View your monthly rent breakdown, make secure payments, and download payment receipts.' : 'Track cash, card, UPI, bank transfers, and online settlement status in a single unified ledger.'}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <NotificationCenter session={session} onSelectPayment={(p) => setSelectedSettlement(p)} />
-          {userRole !== 'resident' && (
+          {!isResident && (
             <button className="primary" onClick={() => setRecordModal(true)} style={{ backgroundColor: 'var(--green)' }}>
               <Plus size={17} /> Record Cash Payment
             </button>
@@ -348,32 +383,62 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
       {/* Metrics Bar */}
       <div className="room-stats" style={{ marginBottom: '30px' }}>
-        <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Cash Collected Today</small>
-          <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.collectedToday)}</strong>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Offline cash reconciliation</span>
-        </article>
+        {isResident ? (
+          <>
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Total Paid</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(residentStats.totalPaid)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>All verified payments</span>
+            </article>
 
-        <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Cash This Month</small>
-          <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.collectedMonth)}</strong>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>June Collections</span>
-        </article>
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Pending Dues</small>
+              <strong style={{ color: residentStats.pendingDues > 0 ? 'var(--color-danger)' : 'var(--green)', fontSize: '20px' }}>{money(residentStats.pendingDues)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{residentStats.pendingDues > 0 ? 'Outstanding balance' : 'All clear'}</span>
+            </article>
 
-        <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Outstanding Rent</small>
-          <strong style={{ color: 'var(--color-danger)', fontSize: '20px' }}>{money(stats.outstanding)}</strong>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Due from residents</span>
-        </article>
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Security Deposit</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(residentStats.securityDeposit)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Refundable deposit</span>
+            </article>
 
-        <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Total Revenue (All)</small>
-          <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.totalRevenue)}</strong>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Unified ledger total</span>
-        </article>
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Total Statements</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{residentStats.totalInvoices}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Issued invoices</span>
+            </article>
+          </>
+        ) : (
+          <>
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Cash Collected Today</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.collectedToday)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Offline cash reconciliation</span>
+            </article>
+
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Cash This Month</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.collectedMonth)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Monthly Collections</span>
+            </article>
+
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Outstanding Rent</small>
+              <strong style={{ color: 'var(--color-danger)', fontSize: '20px' }}>{money(stats.outstanding)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Due from residents</span>
+            </article>
+
+            <article className="card metric" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <small style={{ textTransform: 'uppercase', fontSize: '10px', color: 'var(--text-muted)' }}>Total Revenue (All)</small>
+              <strong style={{ color: 'var(--green)', fontSize: '20px' }}>{money(stats.totalRevenue)}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Unified ledger total</span>
+            </article>
+          </>
+        )}
       </div>
 
-      {userRole !== 'resident' && analytics && (
+      {!isResident && analytics && (
         <OwnerAnalyticsCard analytics={analytics} onSelectPayment={(p) => setSelectedSettlement(p)} />
       )}
 
@@ -382,7 +447,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
         <div className="search">
           <Search size={18} />
           <input
-            placeholder="Search by resident name, month, receipt number..."
+            placeholder={isResident ? "Search by month, purpose, or reference number..." : "Search by resident name, month, receipt number..."}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -419,7 +484,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <option value="rent">Rent</option>
           <option value="security_deposit">Security Deposit</option>
           <option value="electricity">Electricity</option>
-<option value="water">Water</option>
+          <option value="water">Water</option>
           <option value="maintenance">Maintenance</option>
           <option value="fine">Fine</option>
           <option value="other">Other</option>
@@ -446,13 +511,13 @@ export default function PaymentsPage({ session, properties = [], members = [], u
               color: 'var(--text-muted)'
             }}
           >
-            <span>Resident</span>
+            <span>{isResident ? 'Property & Details' : 'Resident'}</span>
             <span>Purpose & Month</span>
             <span style={{ textAlign: 'right' }}>Total Invoice</span>
             <span style={{ textAlign: 'right' }}>Amount Paid</span>
             <span style={{ textAlign: 'center' }}>Method</span>
             <span style={{ textAlign: 'center' }}>Status</span>
-            <span style={{ textAlign: 'right' }}>Actions</span>
+            <span style={{ textAlign: 'right' }}>{isResident ? 'Actions / Receipt' : 'Actions'}</span>
           </div>
 
           {filteredPayments.map(p => {
@@ -879,8 +944,10 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           })}
 
           {filteredPayments.length === 0 && (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              No transactions match the selected filters.
+            <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+              {isResident
+                ? 'You have no payment records or invoices matching the selected filters. Once rent dues are generated by your PG manager, they will appear here.'
+                : 'No transactions match the selected filters.'}
             </div>
           )}
         </div>
