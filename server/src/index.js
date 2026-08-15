@@ -74,6 +74,16 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
+      formAction: [
+        "'self'", 
+        "https://sdk.cashfree.com", 
+        "https://*.cashfree.com", 
+        "https://api.cashfree.com", 
+        "https://sandbox.cashfree.com", 
+        "https://checkout.razorpay.com", 
+        "https://api.razorpay.com",
+        "https://*.razorpay.com"
+      ],
       connectSrc: [
         "'self'", 
         "http://localhost:*", 
