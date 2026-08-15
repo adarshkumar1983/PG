@@ -50,11 +50,40 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrc: [
+        "'self'", 
+        "'unsafe-inline'", 
+        "'unsafe-eval'", 
+        "https://sdk.cashfree.com", 
+        "https://*.cashfree.com", 
+        "https://checkout.razorpay.com", 
+        "https://*.razorpay.com"
+      ],
+      frameSrc: [
+        "'self'", 
+        "https://sdk.cashfree.com", 
+        "https://*.cashfree.com", 
+        "https://api.cashfree.com", 
+        "https://sandbox.cashfree.com", 
+        "https://checkout.razorpay.com", 
+        "https://api.razorpay.com"
+      ],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "https://*.onrender.com", "https://api.cashfree.com", "https://sandbox.cashfree.com"]
+      connectSrc: [
+        "'self'", 
+        "http://localhost:*", 
+        "http://127.0.0.1:*", 
+        "https://*.onrender.com", 
+        "https://sdk.cashfree.com", 
+        "https://api.cashfree.com", 
+        "https://sandbox.cashfree.com", 
+        "https://*.cashfree.com", 
+        "https://api.razorpay.com", 
+        "https://lumberjack.razorpay.com",
+        "https://*.razorpay.com"
+      ]
     }
   },
   crossOriginEmbedderPolicy: false
