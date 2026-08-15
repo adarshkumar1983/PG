@@ -54,7 +54,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "https://api.cashfree.com", "https://sandbox.cashfree.com"]
+      connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "https://*.onrender.com", "https://api.cashfree.com", "https://sandbox.cashfree.com"]
     }
   },
   crossOriginEmbedderPolicy: false
@@ -62,19 +62,43 @@ app.use(helmet({
 
 app.use(compression());
 
-// Strict CORS Configuration
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173,http://127.0.0.1:5173')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
+// Dynamic CORS Configuration supporting localhost, Render, and custom domains
+const getAllowedOrigins = () => {
+  const list = [
+    'http://localhost:5173',
+    'http://localhost:4000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:4000'
+  ];
+  if (process.env.FRONTEND_URL) {
+    process.env.FRONTEND_URL.split(',').forEach(u => list.push(u.trim()));
+  }
+  if (process.env.APP_URL) {
+    process.env.APP_URL.split(',').forEach(u => list.push(u.trim()));
+  }
+  if (process.env.RENDER_EXTERNAL_URL) {
+    list.push(process.env.RENDER_EXTERNAL_URL.trim());
+  }
+  return list.filter(Boolean);
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow non-browser requests or matching origins
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    // Allow non-browser requests, same-origin, or matching origins
+    if (!origin) return callback(null, true);
+
+    const allowed = getAllowedOrigins();
+    const isAllowed = 
+      allowed.some(a => origin === a || origin.startsWith(a)) ||
+      origin.endsWith('.onrender.com') ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      process.env.NODE_ENV !== 'production';
+
+    if (isAllowed) {
       return callback(null, true);
     }
-    return callback(new Error('CORS policy does not allow access from the specified origin.'));
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
