@@ -45,6 +45,9 @@ if (process.env.NODE_ENV === 'production') {
 
 const app = express();
 
+// Trust reverse proxy (e.g. Render, Cloudflare, Heroku, AWS ELB) for correct client IP detection
+app.set('trust proxy', 1);
+
 // Security Headers via Helmet
 app.use(helmet({
   contentSecurityPolicy: {
@@ -140,6 +143,7 @@ const authLimiter = rateLimit({
   max: 15, // max 15 attempts per minute per IP
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { message: 'Too many authentication attempts. Please try again in a few moments.' }
 });
 
@@ -147,7 +151,8 @@ const webhookLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 120, // max 120 webhook calls per minute
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
 });
 
 // JSON Body Parser with size limit and raw body capture for webhook signature verification
