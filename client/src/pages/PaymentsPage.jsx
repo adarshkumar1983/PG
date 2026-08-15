@@ -419,7 +419,7 @@ export default function PaymentsPage({ session, properties = [], members = [], u
           <option value="rent">Rent</option>
           <option value="security_deposit">Security Deposit</option>
           <option value="electricity">Electricity</option>
-          <option value="water">Water</option>
+<option value="water">Water</option>
           <option value="maintenance">Maintenance</option>
           <option value="fine">Fine</option>
           <option value="other">Other</option>
@@ -427,23 +427,39 @@ export default function PaymentsPage({ session, properties = [], members = [], u
       </div>
 
       {/* Ledger Table */}
-      <section className="card" style={{ padding: 0, overflowX: 'auto' }}>
-        <div style={{ minWidth: '800px' }}>
-          <div className="tr table-head" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px', background: 'var(--table-head-bg)', display: 'flex', alignItems: 'center' }}>
-            <span style={{ flex: 1.5 }}>Resident</span>
-            <span style={{ flex: 1 }}>Purpose & Month</span>
-            <span style={{ flex: 1, textAlign: 'right' }}>Total Invoice</span>
-            <span style={{ flex: 1, textAlign: 'right' }}>Amount Paid</span>
-            <span style={{ flex: 1.2, textAlign: 'center' }}>Method</span>
-            <span style={{ flex: 1.2, textAlign: 'center' }}>Status</span>
-            <span style={{ flex: 1.5, textAlign: 'right' }}>Actions</span>
+      <section className="card" style={{ padding: 0, overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '14px' }}>
+        <div style={{ minWidth: '940px' }}>
+          {/* Table Header */}
+          <div
+            style={{
+              borderBottom: '1px solid var(--border)',
+              padding: '14px 20px',
+              background: 'var(--table-head-bg)',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(180px, 1.8fr) minmax(130px, 1.2fr) minmax(100px, 0.9fr) minmax(100px, 0.9fr) minmax(110px, 1fr) minmax(105px, 0.9fr) minmax(230px, 2fr)',
+              alignItems: 'center',
+              gap: '14px',
+              fontSize: '11px',
+              fontWeight: '700',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: 'var(--text-muted)'
+            }}
+          >
+            <span>Resident</span>
+            <span>Purpose & Month</span>
+            <span style={{ textAlign: 'right' }}>Total Invoice</span>
+            <span style={{ textAlign: 'right' }}>Amount Paid</span>
+            <span style={{ textAlign: 'center' }}>Method</span>
+            <span style={{ textAlign: 'center' }}>Status</span>
+            <span style={{ textAlign: 'right' }}>Actions</span>
           </div>
 
           {filteredPayments.map(p => {
             const resName = p.residentId?.name || p.name || 'Resident';
             const initials = resName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 
-            // Map status classes
+            // Map status classes & labels
             let statusClass = p.status.toLowerCase().replace('_', '-');
             let statusLabel = p.status.replace('_', ' ');
 
@@ -457,6 +473,48 @@ export default function PaymentsPage({ session, properties = [], members = [], u
             const avatarColor = colors[charCodeSum % colors.length];
 
             const isCash = p.method === 'cash' || (!p.method && p.status === 'paid');
+            const isReceivedPositive = (p.receivedAmount || 0) > 0 || p.status === 'paid';
+
+            // Method Badge Style Resolver
+            const getMethodBadgeStyle = (method) => {
+              const m = (method || '').toLowerCase();
+              if (m === 'cash') {
+                return { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.28)' };
+              }
+              if (m === 'upi') {
+                return { bg: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9', border: 'rgba(14, 165, 233, 0.28)' };
+              }
+              if (m === 'online_gateway' || m === 'online') {
+                return { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16, 185, 129, 0.28)' };
+              }
+              if (m === 'bank_transfer') {
+                return { bg: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: 'rgba(139, 92, 246, 0.28)' };
+              }
+              if (m === 'card') {
+                return { bg: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', border: 'rgba(236, 72, 153, 0.28)' };
+              }
+              return { bg: 'rgba(148, 163, 184, 0.1)', color: 'var(--text-muted)', border: 'var(--border)' };
+            };
+
+            // Status Pill Style Resolver
+            const getStatusPillStyle = (stClass) => {
+              if (stClass === 'paid') {
+                return { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16, 185, 129, 0.3)' };
+              }
+              if (stClass === 'due') {
+                return { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.3)' };
+              }
+              if (stClass === 'pending' || stClass === 'partially-paid') {
+                return { bg: 'rgba(245, 158, 11, 0.14)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.35)' };
+              }
+              if (stClass === 'pending-verification') {
+                return { bg: 'rgba(234, 179, 8, 0.16)', color: '#d97706', border: 'rgba(234, 179, 8, 0.35)' };
+              }
+              return { bg: 'rgba(148, 163, 184, 0.12)', color: 'var(--text-muted)', border: 'var(--border)' };
+            };
+
+            const methodStyle = getMethodBadgeStyle(p.method);
+            const statusStyle = getStatusPillStyle(statusClass);
 
             return (
               <div
@@ -465,97 +523,124 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                   borderBottom: '1px solid var(--border)',
                   display: 'flex',
                   flexDirection: 'column',
-                  transition: 'background 0.2s',
-                  minWidth: '800px'
+                  transition: 'background 0.2s'
                 }}
                 onMouseOver={e => e.currentTarget.style.backgroundColor = 'var(--table-row-hover)'}
                 onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                {/* Main Row Columns */}
+                {/* Main Row Columns in strict CSS Grid */}
                 <div
-                  className="tr"
                   style={{
                     padding: '14px 20px',
-                    borderBottom: 'none',
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(180px, 1.8fr) minmax(130px, 1.2fr) minmax(100px, 0.9fr) minmax(100px, 0.9fr) minmax(110px, 1fr) minmax(105px, 0.9fr) minmax(230px, 2fr)',
                     alignItems: 'center',
-                    width: '100%',
-                    minWidth: '800px'
+                    gap: '14px',
+                    width: '100%'
                   }}
                 >
-                  {/* Resident Details */}
-                  <span className="resident" style={{ flex: 1.5, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <i style={{ background: avatarColor, width: '30px', height: '30px', borderRadius: '50%', color: '#fff', fontStyle: 'normal', display: 'grid', placeItems: 'center', fontSize: '11px', fontWeight: 'bold' }}>{initials}</i>
-                    <span style={{ display: 'flex', flexDirection: 'column' }}>
-                      <b style={{ fontSize: '13px' }}>{resName}</b>
-                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {/* Column 1: Resident Details */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <i
+                      style={{
+                        background: avatarColor,
+                        width: '32px',
+                        height: '32px',
+                        minWidth: '32px',
+                        borderRadius: '50%',
+                        color: '#fff',
+                        fontStyle: 'normal',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: '11px',
+                        fontWeight: '700'
+                      }}
+                    >
+                      {initials}
+                    </i>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                      <b style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resName}>
+                        {resName}
+                      </b>
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {p.propertyId?.name || 'Property'}
                       </small>
-                    </span>
-                  </span>
+                    </div>
+                  </div>
 
-                  {/* Purpose & Month */}
-                  <span style={{ flex: 1, display: 'flex', flexDirection: 'column', fontSize: '13px' }}>
-                    <b style={{ textTransform: 'capitalize' }}>{p.purpose || 'rent'}</b>
-                    <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatInvoicePeriod(p)}</small>
-                  </span>
+                  {/* Column 2: Purpose & Month */}
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <b style={{ textTransform: 'capitalize', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {p.purpose || 'rent'}
+                    </b>
+                    <small style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {formatInvoicePeriod(p)}
+                    </small>
+                  </div>
 
-                  {/* Total invoice Expected */}
-                  <strong style={{ flex: 1, textAlign: 'right', fontSize: '13px' }}>{money(p.amount)}</strong>
+                  {/* Column 3: Total Invoice Expected */}
+                  <strong style={{ textAlign: 'right', fontSize: '13px', color: 'var(--text-primary)' }}>
+                    {money(p.amount)}
+                  </strong>
 
-                  {/* Received Amount */}
-                  <strong style={{ flex: 1, textAlign: 'right', fontSize: '13px', color: 'var(--green)' }}>
+                  {/* Column 4: Amount Paid */}
+                  <strong
+                    style={{
+                      textAlign: 'right',
+                      fontSize: '13px',
+                      color: isReceivedPositive ? 'var(--green)' : 'var(--text-muted)'
+                    }}
+                  >
                     {money(p.receivedAmount || (p.status === 'paid' ? p.amount : 0))}
                   </strong>
 
-                  {/* Payment Method Badge */}
-                  <span style={{ flex: 1.2, textAlign: 'center' }}>
-                    {p.method ? (
-                      <span
-                        className={`badge method-${p.method}`}
-                        style={{
-                          fontSize: '11px',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          textTransform: 'uppercase',
-                          fontWeight: '700',
-                          backgroundColor: p.method === 'cash' ? '#fde8e4' : '#e6efe9',
-                          color: p.method === 'cash' ? '#b45309' : 'var(--green)',
-                          border: p.method === 'cash' ? '1px solid #fed7aa' : '1px solid #c2ffd4',
-                          whiteSpace: 'nowrap',
-                          display: 'inline-block'
-                        }}
-                      >
-                        {p.method === 'online_gateway' ? 'online' : p.method.replace('_', ' ')}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Unspecified</span>
-                    )}
-                  </span>
-
-                  {/* Status Pill */}
-                  <span style={{ flex: 1.2, textAlign: 'center' }}>
+                  {/* Column 5: Payment Method Badge */}
+                  <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                     <span
-                      className={`pill ${statusClass}`}
+                      style={{
+                        fontSize: '10px',
+                        padding: '3px 9px',
+                        borderRadius: '6px',
+                        textTransform: 'uppercase',
+                        fontWeight: '700',
+                        backgroundColor: methodStyle.bg,
+                        color: methodStyle.color,
+                        border: `1px solid ${methodStyle.border}`,
+                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        letterSpacing: '0.4px'
+                      }}
+                    >
+                      {p.method ? (p.method === 'online_gateway' ? 'online' : p.method.replace('_', ' ')) : 'Unspecified'}
+                    </span>
+                  </div>
+
+                  {/* Column 6: Status Pill */}
+                  <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+                    <span
                       style={{
                         fontSize: '11px',
-                        padding: '3px 8px',
+                        padding: '3px 10px',
+                        borderRadius: '999px',
                         textTransform: 'capitalize',
+                        fontWeight: '600',
+                        backgroundColor: statusStyle.bg,
+                        color: statusStyle.color,
+                        border: `1px solid ${statusStyle.border}`,
                         whiteSpace: 'nowrap',
-                        display: 'inline-block',
-                        ...(statusClass === 'pending-verification' ? {
-                          backgroundColor: '#fef3c7',
-                          color: '#d97706',
-                          border: '1px solid #fde68a'
-                        } : {})
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                     >
                       {statusLabel}
                     </span>
-                  </span>
+                  </div>
 
-                  {/* Actions */}
-                  <span style={{ flex: 1.5, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  {/* Column 7: Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px', width: '100%' }}>
                     {p.status !== 'paid' && (
                       userRole === 'resident' ? (
                         p.referenceNumber ? (
@@ -565,13 +650,16 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                             disabled
                             style={{
                               padding: '5px 10px',
+                              height: '30px',
                               fontSize: '11px',
                               backgroundColor: 'var(--border)',
                               color: 'var(--text-secondary)',
                               border: 'none',
                               borderRadius: '6px',
                               fontWeight: '600',
-                              cursor: 'not-allowed'
+                              cursor: 'not-allowed',
+                              display: 'inline-flex',
+                              alignItems: 'center'
                             }}
                           >
                             Pending
@@ -585,14 +673,17 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                               setShowResidentPayModal(true);
                             }}
                             style={{
-                              padding: '5px 10px',
+                              padding: '5px 12px',
+                              height: '30px',
                               fontSize: '11px',
                               backgroundColor: 'var(--green)',
                               color: '#fff',
                               border: 'none',
                               borderRadius: '6px',
                               fontWeight: '600',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center'
                             }}
                           >
                             Pay Online
@@ -606,13 +697,17 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                             onClick={() => { setApprovePaymentId(p._id); setApproveStatusOption('pending'); }}
                             style={{
                               padding: '5px 10px',
+                              height: '30px',
                               fontSize: '11px',
                               backgroundColor: '#10b981',
                               color: '#fff',
                               border: 'none',
                               borderRadius: '6px',
                               fontWeight: '600',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              whiteSpace: 'nowrap'
                             }}
                           >
                             Approve Payment
@@ -623,14 +718,18 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                             className="primary"
                             onClick={() => setPaymentForRecord(p)}
                             style={{
-                              padding: '5px 10px',
+                              padding: '5px 12px',
+                              height: '30px',
                               fontSize: '11px',
                               backgroundColor: 'var(--green)',
                               color: '#fff',
                               border: 'none',
                               borderRadius: '6px',
                               fontWeight: '600',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              whiteSpace: 'nowrap'
                             }}
                           >
                             Record Payment
@@ -645,50 +744,89 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                         title="View Settlement Details & Timeline"
                         onClick={() => setSelectedSettlement(p)}
                         style={{
-                          padding: '4px 8px',
+                          padding: '5px 10px',
+                          height: '30px',
                           fontSize: '11px',
-                          backgroundColor: '#ebf5ff',
-                          color: '#2563eb',
-                          border: '1px solid #bfdbfe',
+                          backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                          color: '#3b82f6',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
                           borderRadius: '6px',
                           fontWeight: '600',
                           cursor: 'pointer',
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '5px',
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        <ArrowRightLeft size={12} /> Settlement
+                        <ArrowRightLeft size={13} /> Settlement
                       </button>
                     )}
 
+                    {/* Print Receipt Icon Button */}
                     <button
                       title="View & Print Receipt"
                       onClick={() => setReceiptPayment(p)}
-                      style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'var(--text-primary)' }}
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--card-bg)',
+                        borderRadius: '6px',
+                        color: 'var(--text-primary)',
+                        display: 'grid',
+                        placeItems: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
                     >
                       <Printer size={14} />
                     </button>
 
+                    {/* Edit Cash Payment Icon Button */}
                     {isCash && userRole !== 'resident' && (
-                      <>
-                        <button
-                          title="Edit Cash Payment"
-                          onClick={() => handleEditClick(p)}
-                          style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'var(--green)' }}
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          title="Delete Payment"
-                          onClick={() => setDeletePaymentId(p._id)}
-                          style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', padding: '6px', borderRadius: '6px', color: 'red' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </>
+                      <button
+                        title="Edit Cash Payment"
+                        onClick={() => handleEditClick(p)}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          border: '1px solid var(--border)',
+                          background: 'var(--card-bg)',
+                          borderRadius: '6px',
+                          color: 'var(--green)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          cursor: 'pointer',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Edit2 size={14} />
+                      </button>
                     )}
-                  </span>
+
+                    {/* Delete Payment Icon Button */}
+                    {isCash && userRole !== 'resident' && (
+                      <button
+                        title="Delete Payment"
+                        onClick={() => setDeletePaymentId(p._id)}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          borderRadius: '6px',
+                          color: '#ef4444',
+                          display: 'grid',
+                          placeItems: 'center',
+                          cursor: 'pointer',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Verification Details Sub-row */}
@@ -720,19 +858,13 @@ export default function PaymentsPage({ session, properties = [], members = [], u
                           setViewScreenshotUrl(p.screenshot);
                         }}
                         style={{
-                          background: 'var(--green)',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '4px 10px',
-                          cursor: 'pointer',
+                          background: 'transparent',
+                          border: '1px solid #d97706',
+                          color: '#d97706',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
                           fontSize: '10px',
-                          fontWeight: '700',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-                          transition: 'opacity 0.15s'
+                          fontWeight: '700'
                         }}
                         onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
                         onMouseOut={e => e.currentTarget.style.opacity = '1'}
