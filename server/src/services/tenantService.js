@@ -556,19 +556,26 @@ export async function createMember(tenant, data) {
     throw err;
   }
 
+  const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(0, 10) : undefined;
+  if (mobile && (!cleanMobile || cleanMobile.length !== 10)) {
+    const err = new Error('Mobile number must be a valid 10-digit number.');
+    err.status = 400;
+    throw err;
+  }
+
   const accessSecret = process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
 
   if (!isDbConnected()) {
-    const mockMem = mockStore.addMockMember({ name, email, mobile, role, propertyId, roomId, bedId });
-    const inviteToken = jwt.sign({ membershipId: mockMem.id, email: email || mobile }, accessSecret, { expiresIn: '7d' });
+    const mockMem = mockStore.addMockMember({ name, email, mobile: cleanMobile, role, propertyId, roomId, bedId });
+    const inviteToken = jwt.sign({ membershipId: mockMem.id, email: email || cleanMobile }, accessSecret, { expiresIn: '7d' });
     const inviteLink = `${getAppUrl()}/accept-invite?token=${inviteToken}`;
-    attemptSendInvitation(email, mobile, name, role, tenant.organizationId, inviteLink);
+    attemptSendInvitation(email, cleanMobile, name, role, tenant.organizationId, inviteLink);
     return { ...mockMem, inviteLink };
   }
 
-  let user = await User.findOne({ $or: [...(email ? [{ email: email.toLowerCase() }] : []), ...(mobile ? [{ mobile }] : [])] });
+  let user = await User.findOne({ $or: [...(email ? [{ email: email.toLowerCase() }] : []), ...(cleanMobile ? [{ mobile: cleanMobile }] : [])] });
   if (!user) {
-    user = await User.create({ name, email, mobile });
+    user = await User.create({ name, email, mobile: cleanMobile });
   } else {
     const existingMembership = await Membership.findOne({ organizationId: tenant.organizationId, userId: user.id });
     if (existingMembership) {

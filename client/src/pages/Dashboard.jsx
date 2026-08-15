@@ -769,7 +769,15 @@ export function Dashboard({ session, onLogout }) {
               <input required placeholder="e.g. Aman Gupta" autoFocus />
             </label>
             <label>Mobile number
-              <input required placeholder="+91 98765 43210" />
+              <input
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
+                placeholder="e.g. 9876543210"
+                onChange={e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); }}
+                required
+              />
             </label>
             <div className="form-row">
               <label>Check-in date

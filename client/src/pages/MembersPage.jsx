@@ -183,6 +183,21 @@ export function MembersPage({ session, properties = [], onRefresh }) {
   const submit = async e => {
     e.preventDefault();
     setError('');
+
+    // Numeric validation for Mobile Number
+    if (form.mobile) {
+      const cleanMobile = form.mobile.replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        setError('Mobile number must be a valid 10-digit number.');
+        return;
+      }
+    }
+
+    if (recordInitialPayment && paymentAmount && Number(paymentAmount) <= 0) {
+      setError('Initial payment amount must be greater than 0.');
+      return;
+    }
+
     setSaving(true);
     try {
       const response = await fetch('/api/tenant/members', {
@@ -194,6 +209,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
         },
         body: JSON.stringify({
           ...form,
+          mobile: form.mobile ? form.mobile.replace(/\D/g, '') : '',
           recordInitialPayment,
           paymentAmount: recordInitialPayment ? Number(paymentAmount) : undefined,
           paymentMethod: recordInitialPayment ? paymentMethod : undefined,
@@ -525,7 +541,15 @@ export function MembersPage({ session, properties = [], onRefresh }) {
                 <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required placeholder="name@example.com" />
               </label>
               <label>Mobile number
-                <input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} placeholder="+91 98765 43210" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  value={form.mobile}
+                  onChange={e => setForm({ ...form, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                  placeholder="e.g. 9876543210"
+                />
               </label>
             </div>
 

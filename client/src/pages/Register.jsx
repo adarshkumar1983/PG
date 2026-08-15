@@ -36,6 +36,14 @@ export function Register({ onSwitchView }) {
       return;
     }
 
+    if (mobile) {
+      const cleanMobile = mobile.replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        setError('Mobile number must be a valid 10-digit number.');
+        return;
+      }
+    }
+
     if (!termsAccepted) {
       setError('Please agree to the Terms of Service and Privacy Policy.');
       return;
@@ -235,11 +243,14 @@ export function Register({ onSwitchView }) {
                   <input
                     id="reg-mobile"
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     value={mobile}
-                    onChange={e => setMobile(e.target.value)}
+                    onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     onFocus={() => setFocusedField('mobile')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="+91 98765 43210"
+                    placeholder="e.g. 9876543210"
                     autoComplete="tel"
                   />
                 </motion.div>

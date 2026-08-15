@@ -42,7 +42,12 @@ router.post('/register', async (req, res) => {
   if (!name || !email || !password || !organizationName) return res.status(400).json({ message: 'Name, email, password and PG name are required.' });
   if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
   
-  const user = new User({ name, email: email.toLowerCase().trim(), mobile: mobile?.trim() }); 
+  const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(0, 10) : undefined;
+  if (mobile && (!cleanMobile || cleanMobile.length !== 10)) {
+    return res.status(400).json({ message: 'Mobile number must be a valid 10-digit number.' });
+  }
+
+  const user = new User({ name, email: email.toLowerCase().trim(), mobile: cleanMobile }); 
   await user.setPassword(password); 
   await user.save();
   
