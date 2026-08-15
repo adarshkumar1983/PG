@@ -808,8 +808,16 @@ export function Dashboard({ session, onLogout }) {
       )}
       {toast && <div className="toast">✓ {toast}</div>}
       {paymentLoading && (
-        <div className="toast" style={{ backgroundColor: '#e0efe3', color: '#17644f', border: '1px solid #c2ffd4' }}>
-          🔄 {paymentStatusText || 'Processing payment...'}
+        <div className="toast" style={{ backgroundColor: 'var(--card-bg)', color: 'var(--text-primary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 9999, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
+          <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span> {paymentStatusText || 'Processing payment...'}
+          <button
+            type="button"
+            onClick={() => { setPaymentLoading(false); setPaymentStatusText(''); }}
+            style={{ marginLeft: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+            title="Cancel"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
