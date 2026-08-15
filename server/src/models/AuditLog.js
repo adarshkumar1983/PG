@@ -17,4 +17,5 @@ const auditLogSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+auditLogSchema.index({ organizationId: 1, createdAt: -1 });
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);

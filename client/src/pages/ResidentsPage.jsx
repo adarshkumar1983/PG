@@ -3,6 +3,8 @@ import { Search, Plus, User, Building, Phone, Mail, ChevronRight, X, UserCheck, 
 import RecordPaymentModal from '../components/RecordPaymentModal.jsx';
 import ReceiptModal from '../components/ReceiptModal.jsx';
 import { money } from '../utils/formatters.js';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { CardSkeleton } from '../components/Skeleton.jsx';
 
 export default function ResidentsPage({ session, properties = [], members = [], onRefresh }) {
   const [residents, setResidents] = useState([]);
@@ -36,22 +38,28 @@ export default function ResidentsPage({ session, properties = [], members = [], 
     setTimeout(() => setToast(''), 3000);
   };
 
-  const fetchResidentsAndPayments = () => {
-    const fetchRes = fetch('/api/tenant/residents', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+  const fetchResidentsAndPayments = (force = false) => {
+    const fetchRes = fetchWithCache('/api/tenant/residents', session, {
+      force,
+      onBackgroundUpdate: (resData) => {
+        if (Array.isArray(resData)) setResidents(resData);
+      }
+    });
 
-    const fetchPay = fetch('/api/tenant/payments', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+    const fetchPay = fetchWithCache('/api/tenant/payments', session, {
+      force,
+      onBackgroundUpdate: (payData) => {
+        if (Array.isArray(payData)) setPayments(payData);
+      }
+    });
 
     Promise.all([fetchRes, fetchPay])
       .then(([resData, payData]) => {
-        setResidents(resData);
-        setPayments(payData);
+        if (Array.isArray(resData)) setResidents(resData);
+        if (Array.isArray(payData)) setPayments(payData);
         
         // Refresh selected resident drawer if open
-        if (selectedResident) {
+        if (selectedResident && Array.isArray(resData)) {
           const updatedRes = resData.find(r => r._id === selectedResident._id);
           if (updatedRes) setSelectedResident(updatedRes);
         }
@@ -62,7 +70,7 @@ export default function ResidentsPage({ session, properties = [], members = [], 
 
   useEffect(() => {
     fetchResidentsAndPayments();
-  }, [session, selectedResident?._id]);
+  }, [session]);
 
   // Find property, room, bed details for a resident
   const getResidentRoomDetails = (resident) => {
@@ -147,7 +155,9 @@ export default function ResidentsPage({ session, properties = [], members = [], 
       notify('New invoice raised successfully!');
       setInvoiceModal(false);
       setInvoiceForm({ purpose: 'rent', amount: '', invoiceMonth: new Date().toISOString().slice(0, 7) });
-      fetchResidentsAndPayments();
+      invalidateCache(['payments', 'residents', 'dashboard']);
+      fetchResidentsAndPayments(true);
+      if (onRefresh) onRefresh();
     } catch (err) {
       setInvoiceError(err.message || 'Could not save invoice.');
     } finally {
@@ -162,7 +172,17 @@ export default function ResidentsPage({ session, properties = [], members = [], 
   }, [payments, selectedResident]);
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading residents data...</div>;
+    return (
+      <div className="residents-page" style={{ position: 'relative', minHeight: '80vh', padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Resident Management</p>
+            <h1>Residents Directory</h1>
+          </div>
+        </div>
+        <CardSkeleton count={6} height="160px" />
+      </div>
+    );
   }
 
   return (

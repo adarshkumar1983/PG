@@ -1,29 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, CheckCheck, CreditCard, ShieldCheck, Zap, X } from 'lucide-react';
+import { fetchWithCache } from '../utils/apiClient.js';
 
 export default function NotificationCenter({ session, onSelectPayment }) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchNotifications = () => {
+  const fetchNotifications = (force = false) => {
     if (!session?.accessToken) return;
-    setLoading(true);
-    fetch('/api/tenant/notifications', {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        'x-organization-id': session.organizationId
+    fetchWithCache('/api/tenant/notifications', session, {
+      force,
+      ttl: 15000,
+      onBackgroundUpdate: (data) => {
+        if (Array.isArray(data)) setNotifications(data);
       }
     })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setNotifications(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then(data => {
+        if (Array.isArray(data)) setNotifications(data);
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000); // poll every 15s
+    const interval = setInterval(() => fetchNotifications(true), 30000); // poll every 30s in background
     return () => clearInterval(interval);
   }, [session]);
 

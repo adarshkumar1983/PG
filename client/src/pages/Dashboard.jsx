@@ -21,6 +21,8 @@ import SettingsPage from './SettingsPage.jsx';
 import MessManagementPage from './MessManagementPage.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
 import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
 const nav = [
   ['Overview', LayoutDashboard], ['My PG', Building2], ['Members', Users], ['Residents', Users], ['Rooms & beds', BedDouble],
@@ -82,7 +84,8 @@ export function Dashboard({ session, onLogout }) {
         amountLabel: `${label} (₹${amount})`,
         onSuccess: (msg) => {
           notify(msg);
-          refreshDashboardData();
+          invalidateCache(['dashboard', 'payments']);
+          refreshDashboardData(true);
         },
         onFailure: (msg) => {
           notify(`Payment failed: ${msg}`);
@@ -103,8 +106,6 @@ export function Dashboard({ session, onLogout }) {
   const [ready, setReady] = useState(false);
   const navContainerRef = useRef(null);
   const activeBtnRef = useRef(null);
-
-
 
   useEffect(() => {
     const updateCoords = () => {
@@ -143,33 +144,38 @@ export function Dashboard({ session, onLogout }) {
     };
   }, [active, ready]);
 
-  const refreshDashboardData = useCallback(() => {
-    const fetchDashboard = fetch('/api/tenant/dashboard', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(result => {
-        if (result.stats) setData(result);
-      });
+  const refreshDashboardData = useCallback((forceRefresh = false) => {
+    const fetchDashboard = fetchWithCache('/api/tenant/dashboard', session, {
+      force: forceRefresh,
+      onBackgroundUpdate: (result) => {
+        if (result?.stats) setData(result);
+      }
+    }).then(result => {
+      if (result && result.stats) setData(result);
+    });
 
-    const fetchProperties = fetch('/api/tenant/properties', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(result => {
+    const fetchProperties = fetchWithCache('/api/tenant/properties', session, {
+      force: forceRefresh,
+      onBackgroundUpdate: (result) => {
+        if (Array.isArray(result)) setProperties(result);
+      }
+    }).then(result => {
+      if (Array.isArray(result)) {
         setProperties(result);
         if (result.length > 0 && !selectedPropertyId) {
           setSelectedPropertyId(result[0]._id);
         }
-      });
+      }
+    });
 
-    const fetchMembers = fetch('/api/tenant/members', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(result => {
-        setMembers(result);
-      });
+    const fetchMembers = fetchWithCache('/api/tenant/members', session, {
+      force: forceRefresh,
+      onBackgroundUpdate: (result) => {
+        if (Array.isArray(result)) setMembers(result);
+      }
+    }).then(result => {
+      if (Array.isArray(result)) setMembers(result);
+    });
 
     Promise.allSettled([fetchDashboard, fetchProperties, fetchMembers])
       .finally(() => {

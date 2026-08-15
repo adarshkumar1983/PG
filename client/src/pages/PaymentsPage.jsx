@@ -7,6 +7,8 @@ import OwnerAnalyticsCard from '../components/OwnerAnalyticsCard.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
 import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
 import { money, formatInvoicePeriod } from '../utils/formatters.js';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
 export default function PaymentsPage({ session, properties = [], members = [], userRole, upiId, bankDetails, directSettlementEnabled, onlineGatewayEnabled, onRefresh }) {
   const [payments, setPayments] = useState([]);
@@ -27,14 +29,12 @@ export default function PaymentsPage({ session, properties = [], members = [], u
 
   useEffect(() => {
     if (!session?.accessToken || userRole === 'resident') return;
-    fetch('/api/tenant/settlements/analytics', {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        'x-organization-id': session.organizationId
+    fetchWithCache('/api/tenant/settlements/analytics', session, {
+      onBackgroundUpdate: (data) => {
+        if (data) setAnalytics(data);
       }
     })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setAnalytics(data))
+      .then(data => { if (data) setAnalytics(data); })
       .catch(() => { });
   }, [session, userRole]);
   const [editPayment, setEditPayment] = useState(null);
@@ -64,7 +64,8 @@ export default function PaymentsPage({ session, properties = [], members = [], u
       if (!response.ok) throw new Error(result.message || 'Failed to approve payment.');
 
       notify('Offline payment approved and verified successfully.');
-      loadData();
+      invalidateCache(['payments', 'settlements', 'dashboard', 'residents']);
+      loadData(true);
       if (onRefresh) onRefresh();
     } catch (err) {
       notify(`Error: ${err.message}`);
@@ -139,19 +140,25 @@ export default function PaymentsPage({ session, properties = [], members = [], u
     setTimeout(() => setToast(''), 3000);
   };
 
-  const loadData = () => {
-    const fetchPay = fetch('/api/tenant/payments', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+  const loadData = (force = false) => {
+    const fetchPay = fetchWithCache('/api/tenant/payments', session, {
+      force,
+      onBackgroundUpdate: (payData) => {
+        if (Array.isArray(payData)) setPayments(payData);
+      }
+    });
 
-    const fetchRes = fetch('/api/tenant/residents', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+    const fetchRes = fetchWithCache('/api/tenant/residents', session, {
+      force,
+      onBackgroundUpdate: (resData) => {
+        if (Array.isArray(resData)) setResidents(resData);
+      }
+    });
 
     Promise.all([fetchPay, fetchRes])
       .then(([payData, resData]) => {
-        setPayments(payData);
-        setResidents(resData);
+        if (Array.isArray(payData)) setPayments(payData);
+        if (Array.isArray(resData)) setResidents(resData);
       })
       .catch(err => console.error("Error loading payments list:", err))
       .finally(() => setLoading(false));
@@ -307,7 +314,18 @@ export default function PaymentsPage({ session, properties = [], members = [], u
   };
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading payments data...</div>;
+    return (
+      <div className="payments-page" style={{ padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Financial Ledger</p>
+            <h1>Payments Ledger</h1>
+          </div>
+        </div>
+        <CardSkeleton count={4} height="95px" />
+        <TableSkeleton rows={8} cols={6} />
+      </div>
+    );
   }
 
   return (

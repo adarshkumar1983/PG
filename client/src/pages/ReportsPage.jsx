@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, IndianRupee, TrendingUp, ShieldAlert, BarChart3, Clock, AlertTriangle, FileSpreadsheet, Plus, HelpCircle } from 'lucide-react';
 import { money } from '../utils/formatters.js';
+import { fetchWithCache } from '../utils/apiClient.js';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
 export default function ReportsPage({ session, properties = [] }) {
   const [payments, setPayments] = useState([]);
@@ -18,24 +20,33 @@ export default function ReportsPage({ session, properties = [] }) {
   const [reconciliationToast, setReconciliationToast] = useState('');
 
   // Fetch reports data
-  const loadReportsData = () => {
-    const fetchPay = fetch('/api/tenant/payments', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+  const loadReportsData = (force = false) => {
+    const fetchPay = fetchWithCache('/api/tenant/payments', session, {
+      force,
+      onBackgroundUpdate: (payData) => {
+        if (Array.isArray(payData)) setPayments(payData);
+      }
+    });
 
-    const fetchExp = fetch('/api/tenant/expenses', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+    const fetchExp = fetchWithCache('/api/tenant/expenses', session, {
+      force,
+      onBackgroundUpdate: (expData) => {
+        if (Array.isArray(expData)) setExpenses(expData);
+      }
+    });
 
-    const fetchAudit = fetch('/api/tenant/audit-logs', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
-    }).then(r => r.ok ? r.json() : Promise.reject());
+    const fetchAudit = fetchWithCache('/api/tenant/audit-logs', session, {
+      force,
+      onBackgroundUpdate: (auditData) => {
+        if (Array.isArray(auditData)) setAuditLogs(auditData);
+      }
+    });
 
     Promise.all([fetchPay, fetchExp, fetchAudit])
       .then(([payData, expData, auditData]) => {
-        setPayments(payData);
-        setExpenses(expData);
-        setAuditLogs(auditData);
+        if (Array.isArray(payData)) setPayments(payData);
+        if (Array.isArray(expData)) setExpenses(expData);
+        if (Array.isArray(auditData)) setAuditLogs(auditData);
       })
       .catch(err => console.error("Error loading reports data:", err))
       .finally(() => setLoading(false));
@@ -185,7 +196,18 @@ export default function ReportsPage({ session, properties = [] }) {
   };
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading financial reports...</div>;
+    return (
+      <div className="reports-page" style={{ padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Financial Analytics</p>
+            <h1>Revenue & Reports</h1>
+          </div>
+        </div>
+        <CardSkeleton count={4} height="95px" />
+        <TableSkeleton rows={6} cols={4} />
+      </div>
+    );
   }
 
   return (

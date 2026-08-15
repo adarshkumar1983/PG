@@ -3,6 +3,8 @@ import { Search, IndianRupee, Wrench, ShieldAlert, Calendar, Plus, Trash2, Edit,
 import { money } from '../utils/formatters.js';
 import RecordPaymentModal from '../components/RecordPaymentModal.jsx';
 import ReceiptModal from '../components/ReceiptModal.jsx';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
 export default function MaintenancePage({ session, properties = [], members = [], onRefresh }) {
   const [payments, setPayments] = useState([]);
@@ -36,15 +38,19 @@ export default function MaintenancePage({ session, properties = [], members = []
     setTimeout(() => setToast(''), 3000);
   };
 
-  const loadPayments = () => {
-    setLoading(true);
-    fetch('/api/tenant/payments', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
+  const loadPayments = (force = false) => {
+    fetchWithCache('/api/tenant/payments', session, {
+      force,
+      onBackgroundUpdate: (paymentData) => {
+        if (Array.isArray(paymentData)) {
+          setPayments(paymentData.filter(p => p.purpose === 'maintenance'));
+        }
+      }
     })
-      .then(r => r.ok ? r.json() : Promise.reject())
       .then(paymentData => {
-        // Filter payments to only those with purpose = 'maintenance'
-        setPayments(paymentData.filter(p => p.purpose === 'maintenance'));
+        if (Array.isArray(paymentData)) {
+          setPayments(paymentData.filter(p => p.purpose === 'maintenance'));
+        }
       })
       .catch(err => console.error("Error loading maintenance payments:", err))
       .finally(() => setLoading(false));
@@ -255,6 +261,21 @@ export default function MaintenancePage({ session, properties = [], members = []
       return matchSearch && matchStatus;
     });
   }, [payments, searchQuery, statusFilter]);
+
+  if (loading) {
+    return (
+      <div className="maintenance-page" style={{ padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Property Operations</p>
+            <h1>PG Maintenance Charge Center</h1>
+          </div>
+        </div>
+        <CardSkeleton count={4} height="95px" />
+        <TableSkeleton rows={6} cols={6} />
+      </div>
+    );
+  }
 
   return (
     <div className="maintenance-page">

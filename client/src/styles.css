@@ -5107,3 +5107,53 @@ header {
 [data-theme="dark"] .mess-side-card { box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 [data-theme="dark"] .mess-day-card { box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 [data-theme="dark"] .mess-day-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+
+/* ==========================================================================
+   Skeleton Shimmer Loading System
+   ========================================================================== */
+@keyframes shimmerAnimation {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, 
+    var(--sidebar-border, #e5e7eb) 25%, 
+    rgba(255, 255, 255, 0.4) 37%, 
+    var(--sidebar-border, #e5e7eb) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmerAnimation 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  border-radius: 6px;
+}
+
+[data-theme="dark"] .skeleton-shimmer {
+  background: linear-gradient(90deg, 
+    rgba(255, 255, 255, 0.06) 25%, 
+    rgba(255, 255, 255, 0.12) 37%, 
+    rgba(255, 255, 255, 0.06) 63%
+  );
+  background-size: 200% 100%;
+}
+
+.skeleton-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}

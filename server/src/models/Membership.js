@@ -9,4 +9,6 @@ const membershipSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 membershipSchema.index({ organizationId: 1, userId: 1 }, { unique: true });
+membershipSchema.index({ organizationId: 1, createdAt: -1 });
+membershipSchema.index({ organizationId: 1, role: 1 });
 export const Membership = mongoose.model('Membership', membershipSchema);

@@ -15,6 +15,7 @@ process.on('unhandledRejection', (reason) => {
 // Dynamic imports of modules to ensure exception handlers are registered first
 const express = (await import('express')).default;
 const cors = (await import('cors')).default;
+const compression = (await import('compression')).default;
 const dotenv = (await import('dotenv')).default;
 const mongoose = (await import('mongoose')).default;
 const { dashboard } = await import('./seed.js');
@@ -33,6 +34,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 const app = express();
+app.use(compression());
 const corsOptions = {
   origin: process.env.FRONTEND_URL || '*',
   credentials: true

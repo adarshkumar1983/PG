@@ -53,6 +53,11 @@ const paymentSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 paymentSchema.index({ organizationId: 1, residentId: 1, invoiceMonth: 1, purpose: 1 }, { unique: true });
+paymentSchema.index({ organizationId: 1, createdAt: -1 });
+paymentSchema.index({ organizationId: 1, residentId: 1, createdAt: -1 });
+paymentSchema.index({ organizationId: 1, status: 1 });
+paymentSchema.index({ organizationId: 1, purpose: 1 });
+paymentSchema.index({ gatewayOrderId: 1 }, { sparse: true });
 
 const expenseSchema = new mongoose.Schema({
   organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
@@ -61,6 +66,9 @@ const expenseSchema = new mongoose.Schema({
   amount: { type: Number, required: true, min: 0 }, occurredAt: { type: Date, required: true },
   note: String, recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });
+
+expenseSchema.index({ organizationId: 1, occurredAt: -1 });
+expenseSchema.index({ organizationId: 1, createdAt: -1 });
 
 export const Payment = mongoose.model('Payment', paymentSchema);
 export const Expense = mongoose.model('Expense', expenseSchema);

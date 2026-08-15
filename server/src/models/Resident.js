@@ -18,4 +18,7 @@ const residentSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 residentSchema.index({ organizationId: 1, mobile: 1 });
+residentSchema.index({ organizationId: 1, createdAt: -1 });
+residentSchema.index({ organizationId: 1, propertyId: 1, status: 1 });
+residentSchema.index({ organizationId: 1, userId: 1 });
 export const Resident = mongoose.model('Resident', residentSchema);

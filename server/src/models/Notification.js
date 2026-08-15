@@ -10,4 +10,8 @@ const notificationSchema = new mongoose.Schema({
   data: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 
+notificationSchema.index({ organizationId: 1, createdAt: -1 });
+notificationSchema.index({ organizationId: 1, userId: 1, createdAt: -1 });
+notificationSchema.index({ organizationId: 1, read: 1 });
+
 export const Notification = mongoose.model('Notification', notificationSchema);

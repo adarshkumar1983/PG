@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, IndianRupee, Tag, Calendar, FileText, Check, X, AlertCircle } from 'lucide-react';
 import { money } from '../utils/formatters.js';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
 export default function ExpensesPage({ session, properties = [], onRefresh }) {
   const [expenses, setExpenses] = useState([]);
@@ -28,12 +30,16 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
     setTimeout(() => setToast(''), 3000);
   };
 
-  const loadExpenses = () => {
-    fetch('/api/tenant/expenses', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
+  const loadExpenses = (force = false) => {
+    fetchWithCache('/api/tenant/expenses', session, {
+      force,
+      onBackgroundUpdate: (data) => {
+        if (Array.isArray(data)) setExpenses(data);
+      }
     })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(setExpenses)
+      .then(data => {
+        if (Array.isArray(data)) setExpenses(data);
+      })
       .catch(err => console.error("Error loading expenses:", err))
       .finally(() => setLoading(false));
   };
@@ -83,7 +89,9 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
         occurredAt: new Date().toISOString().slice(0, 10),
         note: ''
       });
-      loadExpenses();
+      invalidateCache(['expenses', 'dashboard', 'reports']);
+      loadExpenses(true);
+      if (onRefresh) onRefresh();
     } catch (err) {
       setError(err.message || 'Could not save expense.');
     } finally {
@@ -98,9 +106,9 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
     const currentYear = new Date().getFullYear();
 
     expenses.forEach(e => {
-      const date = new Date(e.occurredAt);
-      if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-        monthlyTotal += e.amount;
+      const occDate = new Date(e.occurredAt);
+      if (occDate.getMonth() === currentMonth && occDate.getFullYear() === currentYear) {
+        monthlyTotal += e.amount || 0;
       }
     });
 
@@ -120,7 +128,18 @@ export default function ExpensesPage({ session, properties = [], onRefresh }) {
   }, [expenses, searchQuery, categoryFilter]);
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading expenses data...</div>;
+    return (
+      <div className="expenses-page" style={{ padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Operating Outflows</p>
+            <h1>Expense Tracker</h1>
+          </div>
+        </div>
+        <CardSkeleton count={2} height="90px" />
+        <TableSkeleton rows={6} cols={5} />
+      </div>
+    );
   }
 
   return (

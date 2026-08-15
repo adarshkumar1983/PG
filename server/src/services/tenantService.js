@@ -163,6 +163,7 @@ export async function getDashboard(tenant, auth) {
     }
 
     const payments = await Payment.find({ organizationId: tenant.organizationId, residentId: resident._id })
+      .select('amount status receivedAmount paidAt invoiceMonth billingType stayPeriod referenceNumber method createdAt')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -266,9 +267,12 @@ export async function getDashboard(tenant, auth) {
   ] = await Promise.all([
     Resident.countDocuments({ ...filter, status: 'active' }),
     Property.find(filter).lean(),
-    Payment.find(filter).lean(),
     Payment.find(filter)
-      .populate('residentId', 'name')
+      .select('amount receivedAmount status purpose transactions paidAt invoiceMonth billingType stayPeriod')
+      .lean(),
+    Payment.find(filter)
+      .select('amount status paidAt invoiceMonth billingType stayPeriod residentId propertyId')
+      .populate('residentId', 'name roomId bedId')
       .sort({ createdAt: -1 })
       .limit(5)
       .lean()
@@ -495,8 +499,10 @@ export async function updateProperty(tenant, id, data) {
 export async function getMembers(tenant) {
   if (!isDbConnected()) return mockStore.mockMembers;
   const filter = { organizationId: tenant.organizationId };
-  const memberships = await Membership.find(filter).populate('userId', 'name email mobile status').sort({ createdAt: -1 }).lean();
-  const residents = await Resident.find(filter).lean();
+  const [memberships, residents] = await Promise.all([
+    Membership.find(filter).populate('userId', 'name email mobile status').sort({ createdAt: -1 }).lean(),
+    Resident.find(filter).select('userId propertyId roomId bedId').lean()
+  ]);
   const residentMap = new Map(residents.map(r => [r.userId?.toString(), r]));
 
   const accessSecret = process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
@@ -898,13 +904,13 @@ export async function getPayments(tenant, auth) {
   if (!isDbConnected()) return mockStore.getMockPayments(tenant.organizationId, tenant.role === 'resident');
   const query = { organizationId: tenant.organizationId };
   if (tenant.role === 'resident' && auth) {
-    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).lean();
+    const resident = await Resident.findOne({ organizationId: tenant.organizationId, userId: auth.sub }).select('_id').lean();
     if (!resident) return [];
     query.residentId = resident._id;
   }
   return Payment.find(query)
     .populate('residentId', 'name mobile email roomId bedId')
-    .populate('propertyId', 'name rooms')
+    .populate('propertyId', 'name')
     .sort({ createdAt: -1 })
     .lean();
 }
@@ -1222,6 +1228,7 @@ export async function getAuditLogs(tenant) {
   return AuditLog.find({ organizationId: tenant.organizationId })
     .populate('performedBy', 'name email mobile')
     .sort({ createdAt: -1 })
+    .limit(200)
     .lean();
 }
 
@@ -1744,7 +1751,8 @@ export async function getSettlementAnalytics(tenant) {
   }
 
   const payments = await Payment.find({ organizationId: tenant.organizationId })
-    .populate('residentId', 'name room bed')
+    .select('amount status receivedAmount invoiceMonth paidAt createdAt settlementStatus paymentStatus expectedSettlementDate platformFee ownerAmount residentId name')
+    .populate('residentId', 'name')
     .sort({ createdAt: -1 })
     .lean();
 

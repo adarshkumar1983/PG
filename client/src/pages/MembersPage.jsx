@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, ShieldCheck, Mail, Users, Building2, MoreHorizontal, X, ChevronDown } from 'lucide-react';
+import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
+import { TableSkeleton } from '../components/Skeleton.jsx';
 
 export function MembersPage({ session, properties = [], onRefresh }) {
-  const seed = [
-    { id: '1', name: 'Adarsh Kumar', email: 'owner@stayzen.demo', mobile: '+91 98765 43210', role: 'owner', status: 'active' },
-    { id: '2', name: 'Rohan Singh', email: 'manager@greenview.demo', mobile: '+91 99887 76655', role: 'staff', status: 'active' },
-    { id: '3', name: 'Arjun Mehta', email: 'arjun@example.com', mobile: '+91 90000 11223', role: 'resident', status: 'invited' }
-  ];
-  const [members, setMembers] = useState(seed);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -40,13 +38,22 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     setTimeout(() => setToast(''), 3000);
   };
 
-  useEffect(() => {
-    fetch('/api/tenant/members', {
-      headers: { Authorization: `Bearer ${session.accessToken}`, 'x-organization-id': session.organizationId }
+  const loadMembers = (force = false) => {
+    fetchWithCache('/api/tenant/members', session, {
+      force,
+      onBackgroundUpdate: (data) => {
+        if (Array.isArray(data)) setMembers(data);
+      }
     })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(setMembers)
-      .catch(() => { });
+      .then(data => {
+        if (Array.isArray(data)) setMembers(data);
+      })
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadMembers();
   }, [session]);
 
   const handlePropertyChange = (propId) => {
@@ -197,6 +204,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message);
       setMembers(v => [result, ...v]);
+      invalidateCache(['members', 'residents', 'dashboard']);
       if (onRefresh) onRefresh();
       setOpen(false);
       setForm({
@@ -242,6 +250,7 @@ export function MembersPage({ session, properties = [], onRefresh }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Unable to update member role.');
       setMembers(prev => prev.map(m => m.id === result.id ? result : m));
+      invalidateCache(['members', 'residents', 'dashboard']);
       if (onRefresh) onRefresh();
       setEditingMember(null);
     } catch (err) {
@@ -306,6 +315,20 @@ export function MembersPage({ session, properties = [], onRefresh }) {
     }
     return true;
   });
+
+  if (loading) {
+    return (
+      <div className="members-page" style={{ padding: '16px' }}>
+        <div className="setup-heading" style={{ marginBottom: '24px' }}>
+          <div>
+            <p className="eyebrow">Access management</p>
+            <h1>PG members</h1>
+          </div>
+        </div>
+        <TableSkeleton rows={6} cols={5} />
+      </div>
+    );
+  }
 
   return (
     <div className="members-page">
