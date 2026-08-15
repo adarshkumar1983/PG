@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { Organization } from '../models/Organization.js';
 import { Membership } from '../models/Membership.js';
@@ -8,8 +9,23 @@ import * as mockStore from '../mockStore.js';
 import { sendResetPasswordEmail } from '../utils/mailer.js';
 
 const router = Router();
-const accessSecret = () => process.env.JWT_ACCESS_SECRET || 'development-only-change-me';
-const refreshSecret = () => process.env.JWT_REFRESH_SECRET || 'development-refresh-change-me';
+
+const accessSecret = () => {
+  const s = process.env.JWT_ACCESS_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!s || s.includes('change-me'))) {
+    throw new Error('FATAL: JWT_ACCESS_SECRET must be configured securely in production.');
+  }
+  return s || 'dev-access-secret-entropy-9988223311';
+};
+
+const refreshSecret = () => {
+  const s = process.env.JWT_REFRESH_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!s || s.includes('change-me'))) {
+    throw new Error('FATAL: JWT_REFRESH_SECRET must be configured securely in production.');
+  }
+  return s || 'dev-refresh-secret-entropy-1133228899';
+};
+
 const signAccess = user => jwt.sign({ sub: user.id, platformRole: user.platformRole }, accessSecret(), { expiresIn: '15m' });
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
@@ -24,7 +40,12 @@ router.post('/register', async (req, res) => {
   }
   const { name, email, mobile, password, organizationName } = req.body;
   if (!name || !email || !password || !organizationName) return res.status(400).json({ message: 'Name, email, password and PG name are required.' });
-  const user = new User({ name, email, mobile }); await user.setPassword(password); await user.save();
+  if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
+  
+  const user = new User({ name, email: email.toLowerCase().trim(), mobile: mobile?.trim() }); 
+  await user.setPassword(password); 
+  await user.save();
+  
   const slug = `${organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${user.id.slice(-5)}`;
   const organization = await Organization.create({ name: organizationName, slug, ownerUserId: user.id });
   await Membership.create({ organizationId: organization.id, userId: user.id, role: 'owner' });
@@ -33,13 +54,17 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
   if (!isDbConnected()) {
     if (email === 'owner@stayzen.demo' && password === 'demo1234') {
       return res.json({ accessToken: jwt.sign({ sub: 'demo-owner', platformRole: 'user' }, accessSecret(), { expiresIn: '15m' }), user: { name: 'Adarsh Kumar', email: 'owner@stayzen.demo', role: 'owner' }, organizations: [{ id: 'demo-org', name: 'Greenview Residency', role: 'owner' }] });
     }
     return res.status(401).json({ message: 'Incorrect email or password. Please use the demo credentials when MongoDB is offline.' });
   }
-  const user = await User.findOne({ email, status: 'active' }).select('+passwordHash');
+  const user = await User.findOne({ email: email.toLowerCase().trim(), status: 'active' }).select('+passwordHash');
   if (!user || !(await user.verifyPassword(password))) return res.status(401).json({ message: 'Incorrect email or password.' });
   const memberships = await Membership.find({ userId: user.id, status: 'active' }).populate('organizationId', 'name status').lean();
   const refreshToken = jwt.sign({ sub: user.id, type: 'refresh' }, refreshSecret(), { expiresIn: '30d' });
@@ -49,6 +74,8 @@ router.post('/login', async (req, res) => {
 router.post('/accept-invite', async (req, res) => {
   const { token, password } = req.body;
   if (!token || !password) return res.status(400).json({ message: 'Token and password are required.' });
+  if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
+
   try {
     const payload = jwt.verify(token, accessSecret());
     if (!isDbConnected()) {
@@ -79,55 +106,86 @@ router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email address is required.' });
 
+  const genericResponse = { message: 'If the email is registered, a password reset link has been sent.' };
+
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+
     if (!isDbConnected()) {
-      if (email.toLowerCase() === 'owner@stayzen.demo') {
-        const token = jwt.sign({ sub: 'demo-owner', email: email.toLowerCase(), type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
-        const resetLink = `${getAppUrl()}/?resetToken=${token}`;
-        await sendResetPasswordEmail(email.toLowerCase(), 'Adarsh Kumar', resetLink);
-        return res.json({ message: 'Simulated password reset email sent successfully! Please check sent_emails/ folder.', devResetLink: resetLink });
+      if (normalizedEmail === 'owner@stayzen.demo') {
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const resetLink = `${getAppUrl()}/?resetToken=${rawToken}`;
+        await sendResetPasswordEmail(normalizedEmail, 'Adarsh Kumar', resetLink);
       }
-      return res.status(404).json({ message: 'Email not found in demo mode.' });
+      return res.json(genericResponse);
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(404).json({ message: 'No user registered with this email address.' });
+      // Return identical response to prevent user enumeration
+      return res.json(genericResponse);
     }
 
-    const token = jwt.sign({ sub: user.id, email: user.email, type: 'reset-password' }, accessSecret(), { expiresIn: '1h' });
-    const resetLink = `${getAppUrl()}/?resetToken=${token}`;
+    // Generate high-entropy single-use random reset token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour expiration
+    await user.save();
+
+    const resetLink = `${getAppUrl()}/?resetToken=${rawToken}`;
     await sendResetPasswordEmail(user.email, user.name, resetLink);
 
-    res.json({ message: 'Password reset link sent successfully.', devResetLink: resetLink });
+    return res.json(genericResponse);
   } catch (err) {
     console.error('Forgot password error:', err);
-    res.status(500).json({ message: 'An error occurred while processing your request.' });
+    return res.status(500).json({ message: 'An error occurred while processing your request.' });
   }
 });
 
 router.post('/reset-password', async (req, res) => {
   const { token, password } = req.body;
   if (!token || !password) return res.status(400).json({ message: 'Token and password are required.' });
-  if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+  if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
 
   try {
-    const payload = jwt.verify(token, accessSecret());
-    if (payload.type !== 'reset-password') {
-      return res.status(400).json({ message: 'Invalid reset token type.' });
-    }
-
     if (!isDbConnected()) {
-      if (payload.sub === 'demo-owner') {
-        return res.json({ message: 'Password has been reset successfully (Demo mode).' });
-      }
-      return res.status(400).json({ message: 'Invalid reset token sub in demo mode.' });
+      return res.json({ message: 'Password has been reset successfully (Demo mode). You can now log in.' });
     }
 
-    const user = await User.findById(payload.sub);
-    if (!user) return res.status(404).json({ message: 'User not found.' });
+    // Hash the raw token sent from the client to check against the stored SHA-256 hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() }
+    }).select('+resetPasswordToken +resetPasswordExpires');
+
+    if (!user) {
+      // Backward compatibility check for JWT-based reset token
+      try {
+        const payload = jwt.verify(token, accessSecret());
+        if (payload.type === 'reset-password' && payload.sub) {
+          const jwtUser = await User.findById(payload.sub);
+          if (jwtUser) {
+            await jwtUser.setPassword(password);
+            jwtUser.sessions = [];
+            await jwtUser.save();
+            return res.json({ message: 'Password has been reset successfully. You can now log in.' });
+          }
+        }
+      } catch {}
+      return res.status(400).json({ message: 'Invalid or expired reset token.' });
+    }
+
+    // Update password
     await user.setPassword(password);
+    
+    // Invalidate the reset token immediately (single-use)
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    user.sessions = []; // Invalidate previous sessions
     await user.save();
 
     res.json({ message: 'Password has been reset successfully. You can now log in.' });

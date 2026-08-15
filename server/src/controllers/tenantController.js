@@ -244,7 +244,7 @@ export const approveOfflinePayment = asyncHandler(async (req, res) => {
  */
 export const getMessMenu = asyncHandler(async (req, res) => {
   const propertyId = req.query.propertyId || req.headers['x-property-id'];
-  const menu = await tenantService.getMessMenu(req.tenant?.id || 'demo-org', propertyId);
+  const menu = await tenantService.getMessMenu(req.tenant.organizationId, propertyId);
   res.json(menu);
 });
 
@@ -255,7 +255,7 @@ export const updateMessMenu = asyncHandler(async (req, res) => {
   const propertyId = req.body.propertyId || req.headers['x-property-id'];
   const { dayOfWeek, breakfast, lunch, snacks, dinner } = req.body;
   if (!dayOfWeek) return res.status(400).json({ message: 'dayOfWeek is required.' });
-  const updated = await tenantService.updateMessMenu(req.tenant?.id || 'demo-org', propertyId, dayOfWeek, { breakfast, lunch, snacks, dinner });
+  const updated = await tenantService.updateMessMenu(req.tenant.organizationId, propertyId, dayOfWeek, { breakfast, lunch, snacks, dinner });
   res.json(updated);
 });
 
@@ -265,7 +265,7 @@ export const updateMessMenu = asyncHandler(async (req, res) => {
 export const getMealSkips = asyncHandler(async (req, res) => {
   const propertyId = req.query.propertyId || req.headers['x-property-id'];
   const date = req.query.date;
-  const skips = await tenantService.getMealSkips(req.tenant?.id || 'demo-org', propertyId, date);
+  const skips = await tenantService.getMealSkips(req.tenant.organizationId, propertyId, date);
   res.json(skips);
 });
 
@@ -274,14 +274,18 @@ export const getMealSkips = asyncHandler(async (req, res) => {
  */
 export const toggleMealSkip = asyncHandler(async (req, res) => {
   const propertyId = req.body.propertyId || req.headers['x-property-id'];
-  const result = await tenantService.toggleMealSkip(req.tenant?.id || 'demo-org', propertyId, req.body);
+  const result = await tenantService.toggleMealSkip(req.tenant.organizationId, propertyId, req.body);
   res.json(result);
 });
 
 /**
- * GET / List simulated emails
+ * GET / List simulated emails (Development only)
  */
 export const getSentEmails = asyncHandler(async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ message: 'Endpoint not found.' });
+  }
+
   if (!fs.existsSync(sentEmailsDir)) {
     return res.json([]);
   }
@@ -310,17 +314,24 @@ export const getSentEmails = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET / View single simulated email HTML content
+ * GET / View single simulated email HTML content (Development only)
  */
 export const getSentEmailContent = asyncHandler(async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ message: 'Endpoint not found.' });
+  }
+
   const { filename } = req.params;
   const safeFilename = path.basename(filename);
   const filePath = path.join(sentEmailsDir, safeFilename);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ message: 'Email file not found.' });
   }
-  const html = fs.readFileSync(filePath, 'utf8');
+  let html = fs.readFileSync(filePath, 'utf8');
+  // Mask sensitive reset token strings if present
+  html = html.replace(/token=([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)/g, 'token=[MASKED_FOR_SECURITY]');
   res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline'");
   res.send(html);
 });
 

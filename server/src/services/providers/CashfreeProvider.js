@@ -149,7 +149,10 @@ export default class CashfreeProvider {
     }
 
     if (!this.isConfigured()) {
-      return { success: true, message: 'Mock payment verified successfully.' };
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Cashfree online gateway credentials are not configured in production.');
+      }
+      return { success: true, message: 'Mock payment verified successfully (Development Mode).' };
     }
 
     const response = await nativeFetch(`${this.getBaseUrl()}/orders/${order_id}`, {
@@ -199,93 +202,147 @@ export default class CashfreeProvider {
     const timestamp = headers['x-webhook-timestamp'];
     const secretKey = this.getSecretKey();
 
-    if (secretKey && signature && timestamp) {
-      const signatureData = timestamp + rawBody;
-      const expectedSignature = crypto
-        .createHmac('sha256', secretKey)
-        .update(signatureData)
-        .digest('base64');
-
-      if (signature !== expectedSignature) {
-        throw new Error('Cashfree webhook signature verification failed.');
-      }
+    if (!secretKey) {
+      throw new Error('Cashfree webhook secret key is not configured.');
     }
 
-    const body = JSON.parse(rawBody);
+    if (!signature || !timestamp) {
+      throw new Error('Missing Cashfree webhook signature or timestamp headers.');
+    }
+
+    // Validate timestamp freshness (prevent replay attacks, allow 5 minutes clock skew)
+    const webhookTime = parseInt(timestamp, 10);
+    if (isNaN(webhookTime)) {
+      throw new Error('Invalid Cashfree webhook timestamp format.');
+    }
+    const currentTime = Date.now();
+    // Cashfree timestamps can be in milliseconds or seconds
+    const timeDiffMs = Math.abs(currentTime - (webhookTime < 1e12 ? webhookTime * 1000 : webhookTime));
+    if (timeDiffMs > 5 * 60 * 1000) {
+      throw new Error('Cashfree webhook timestamp is outside acceptable tolerance (replay protection).');
+    }
+
+    // Verify cryptographic HMAC-SHA256 signature against raw unparsed body
+    const signatureData = timestamp + rawBody;
+    const expectedSignature = crypto
+      .createHmac('sha256', secretKey)
+      .update(signatureData)
+      .digest('base64');
+
+    if (signature !== expectedSignature) {
+      throw new Error('Cashfree webhook cryptographic signature verification failed.');
+    }
+
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      throw new Error('Invalid JSON payload in Cashfree webhook.');
+    }
+
     const { type, data } = body;
 
-    if (type === 'PAYMENT_SUCCESS_WEBHOOK') {
-      const orderId = data.order?.order_id;
-      const cfPaymentId = data.payment?.cf_payment_id;
-      const paymentStatus = data.payment?.payment_status;
-
-      if (!orderId || paymentStatus !== 'SUCCESS') return;
-
-      // Extract original payment ID (which is part of the custom order ID schema cf_id_timestamp)
-      const parts = orderId.split('_');
-      let paymentRecordId = parts[1];
-
-      const paymentRecord = await Payment.findOne({
-        $or: [{ gatewayOrderId: orderId }, { _id: paymentRecordId }]
-      });
-
-      if (paymentRecord && paymentRecord.status !== 'paid') {
-        const transactionExists = paymentRecord.transactions.some(tx => tx.referenceNumber === cfPaymentId);
-        if (transactionExists) {
-          return;
-        }
-
-        const amount = paymentRecord.amount;
-        const platformFee = Math.round(amount * 0.02 * 100) / 100;
-        const ownerAmount = Math.round((amount - platformFee) * 100) / 100;
-
-        const expSettlement = new Date();
-        expSettlement.setDate(expSettlement.getDate() + 2);
-
-        paymentRecord.status = 'paid';
-        paymentRecord.paymentStatus = 'verified';
-        paymentRecord.settlementStatus = 'processing';
-        paymentRecord.paymentId = cfPaymentId;
-        paymentRecord.platformFee = platformFee;
-        paymentRecord.ownerAmount = ownerAmount;
-        paymentRecord.expectedSettlementDate = expSettlement;
-        paymentRecord.receivedAmount = amount;
-        paymentRecord.method = 'online_gateway';
-        paymentRecord.paidAt = new Date();
-        paymentRecord.gatewayPaymentId = cfPaymentId;
-        paymentRecord.gatewayOrderId = orderId;
-        paymentRecord.provider = 'cashfree';
-        paymentRecord.providerStatus = paymentStatus;
-        paymentRecord.rawProviderReference = data;
-
-        paymentRecord.transactions.push({
-          amount: amount,
-          paidAt: new Date(),
-          method: 'online_gateway',
-          referenceNumber: cfPaymentId,
-          notes: 'Paid online via Cashfree (Webhook)'
-        });
-
-        await paymentRecord.save();
-
-        const resident = await Resident.findById(paymentRecord.residentId).lean();
-        const residentName = resident?.name || 'Resident';
-
-        await Notification.create({
-          organizationId: paymentRecord.organizationId,
-          title: 'Rent Payment Captured',
-          message: `${residentName} has successfully paid ₹${new Intl.NumberFormat('en-IN').format(amount)} for ${paymentRecord.invoiceMonth} rent.`,
-          type: 'payment',
-          data: {
-            paymentId: paymentRecord._id,
-            amount,
-            platformFee,
-            ownerAmount,
-            residentName
-          }
-        });
-      }
+    if (type !== 'PAYMENT_SUCCESS_WEBHOOK') {
+      // Safely ignore unhandled event types without error
+      return { status: 'ignored', type };
     }
+
+    const orderId = data.order?.order_id;
+    const cfPaymentId = data.payment?.cf_payment_id;
+    const paymentStatus = data.payment?.payment_status;
+    const orderAmount = Number(data.order?.order_amount);
+
+    if (!orderId || paymentStatus !== 'SUCCESS' || !cfPaymentId) {
+      throw new Error('Invalid payment details in Cashfree success webhook.');
+    }
+
+    // Extract original payment ID if encoded in orderId
+    const parts = orderId.split('_');
+    const paymentRecordId = parts.length > 1 ? parts[1] : null;
+
+    const queryOr = [{ gatewayOrderId: orderId }];
+    if (paymentRecordId && mongoose.Types.ObjectId.isValid(paymentRecordId)) {
+      queryOr.push({ _id: paymentRecordId });
+    }
+
+    const paymentRecord = await Payment.findOne({ $or: queryOr });
+
+    if (!paymentRecord) {
+      throw new Error(`Associated payment invoice not found for order ${orderId}.`);
+    }
+
+    // Validate expected amount against paid amount
+    if (orderAmount && Math.abs(orderAmount - (paymentRecord.amount - (paymentRecord.receivedAmount || 0))) > 1 && paymentRecord.status !== 'paid') {
+      console.warn(`[Webhook Warning] Paid amount ${orderAmount} differs from expected invoice balance ${paymentRecord.amount}`);
+    }
+
+    // Idempotency check: Check if transaction reference is already recorded
+    const transactionExists = Array.isArray(paymentRecord.transactions) &&
+      paymentRecord.transactions.some(tx => tx.referenceNumber === cfPaymentId);
+
+    if (transactionExists || (paymentRecord.status === 'paid' && paymentRecord.gatewayPaymentId === cfPaymentId)) {
+      return { status: 'already_processed', paymentId: paymentRecord._id };
+    }
+
+    const amount = paymentRecord.amount;
+    const platformFee = Math.round(amount * 0.02 * 100) / 100;
+    const ownerAmount = Math.round((amount - platformFee) * 100) / 100;
+
+    const expSettlement = new Date();
+    expSettlement.setDate(expSettlement.getDate() + 2);
+
+    paymentRecord.status = 'paid';
+    paymentRecord.paymentStatus = 'verified';
+    paymentRecord.settlementStatus = 'processing';
+    paymentRecord.paymentId = cfPaymentId;
+    paymentRecord.platformFee = platformFee;
+    paymentRecord.ownerAmount = ownerAmount;
+    paymentRecord.expectedSettlementDate = expSettlement;
+    paymentRecord.receivedAmount = amount;
+    paymentRecord.method = 'online_gateway';
+    paymentRecord.paidAt = new Date();
+    paymentRecord.gatewayPaymentId = cfPaymentId;
+    paymentRecord.gatewayOrderId = orderId;
+    paymentRecord.provider = 'cashfree';
+    paymentRecord.providerStatus = paymentStatus;
+    paymentRecord.rawProviderReference = data;
+
+    if (!paymentRecord.transactions) paymentRecord.transactions = [];
+    paymentRecord.transactions.push({
+      amount: amount,
+      paidAt: new Date(),
+      method: 'online_gateway',
+      referenceNumber: cfPaymentId,
+      notes: 'Paid online via Cashfree (Verified Webhook)'
+    });
+
+    if (!paymentRecord.history) paymentRecord.history = [];
+    paymentRecord.history.push({
+      action: 'payment_webhook_captured',
+      timestamp: new Date(),
+      details: { amount, cfPaymentId, orderId }
+    });
+
+    await paymentRecord.save();
+
+    const resident = await Resident.findById(paymentRecord.residentId).lean();
+    const residentName = resident?.name || 'Resident';
+
+    await Notification.create({
+      organizationId: paymentRecord.organizationId,
+      title: 'Rent Payment Captured',
+      message: `${residentName} has successfully paid ₹${new Intl.NumberFormat('en-IN').format(amount)} for ${paymentRecord.invoiceMonth} rent.`,
+      type: 'payment',
+      data: {
+        paymentId: paymentRecord._id,
+        amount,
+        platformFee,
+        ownerAmount,
+        residentName
+      }
+    });
+
+    return { status: 'processed', paymentId: paymentRecord._id };
   }
 
   async refundPayment(org, orderId, refundId, amount, note) {

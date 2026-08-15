@@ -477,12 +477,28 @@ export async function updateProperty(tenant, id, data) {
     }
     return updatedProp;
   }
-  if (data.rooms && Array.isArray(data.rooms)) {
-    data.rooms = cleanTemporaryIds(data.rooms);
+
+  // Explicit allowlist to prevent mass-assignment and tenant re-parenting
+  const { name, address, contactNumber, rules, amenities, rooms, maintenanceEnabled, maintenanceAmount, maintenanceFrequency, maintenanceCustomMonths, maintenanceNextDueDate, maintenanceSeparateInvoice } = data;
+  const updatePayload = {};
+  if (name !== undefined) updatePayload.name = name;
+  if (address !== undefined) updatePayload.address = address;
+  if (contactNumber !== undefined) updatePayload.contactNumber = contactNumber;
+  if (rules !== undefined) updatePayload.rules = rules;
+  if (amenities !== undefined) updatePayload.amenities = amenities;
+  if (maintenanceEnabled !== undefined) updatePayload.maintenanceEnabled = maintenanceEnabled;
+  if (maintenanceAmount !== undefined) updatePayload.maintenanceAmount = maintenanceAmount;
+  if (maintenanceFrequency !== undefined) updatePayload.maintenanceFrequency = maintenanceFrequency;
+  if (maintenanceCustomMonths !== undefined) updatePayload.maintenanceCustomMonths = maintenanceCustomMonths;
+  if (maintenanceNextDueDate !== undefined) updatePayload.maintenanceNextDueDate = maintenanceNextDueDate;
+  if (maintenanceSeparateInvoice !== undefined) updatePayload.maintenanceSeparateInvoice = maintenanceSeparateInvoice;
+  if (rooms !== undefined && Array.isArray(rooms)) {
+    updatePayload.rooms = cleanTemporaryIds(rooms);
   }
+
   const updatedProperty = await Property.findOneAndUpdate(
     { _id: id, organizationId: tenant.organizationId },
-    { $set: data },
+    { $set: updatePayload },
     { new: true, runValidators: true }
   );
   if (!updatedProperty) {
@@ -762,9 +778,16 @@ export async function updateMember(tenant, id, data) {
     }
 
     const userToUpdate = await User.findById(membership.userId);
-    if (userToUpdate) {
-      userToUpdate.email = newEmail;
-      await userToUpdate.save();
+    if (userToUpdate && userToUpdate.status === 'invited') {
+      // Check if user is only in this organization before modifying global email
+      const otherMemberships = await Membership.countDocuments({ 
+        userId: userToUpdate._id, 
+        organizationId: { $ne: tenant.organizationId } 
+      });
+      if (otherMemberships === 0) {
+        userToUpdate.email = newEmail;
+        await userToUpdate.save();
+      }
     }
 
     const residentToUpdate = await Resident.findOne({ organizationId: tenant.organizationId, userId: membership.userId });
@@ -994,9 +1017,9 @@ export async function recordCashPayment(tenant, auth, data) {
     return mockStore.recordMockCashPayment(tenant.organizationId, auth.sub, data);
   }
 
-  const resident = await Resident.findById(residentId);
+  const resident = await Resident.findOne({ _id: residentId, organizationId: tenant.organizationId });
   if (!resident) {
-    const err = new Error('Resident not found.');
+    const err = new Error('Resident not found in this organization.');
     err.status = 404;
     throw err;
   }
@@ -1151,7 +1174,7 @@ export async function updatePayment(tenant, auth, id, data) {
 
   await payment.save();
 
-  const resident = await Resident.findById(payment.residentId).lean();
+  const resident = await Resident.findOne({ _id: payment.residentId, organizationId: tenant.organizationId }).lean();
   await AuditLog.create({
     organizationId: tenant.organizationId,
     performedBy,
@@ -1193,7 +1216,7 @@ export async function deletePayment(tenant, auth, id) {
 
   const user = await User.findById(auth.sub);
   const performedBy = user ? user._id : auth.sub;
-  const resident = await Resident.findById(payment.residentId).lean();
+  const resident = await Resident.findOne({ _id: payment.residentId, organizationId: tenant.organizationId }).lean();
 
   await AuditLog.create({
     organizationId: tenant.organizationId,
@@ -1368,9 +1391,9 @@ export async function initiateCharge(tenant, auth, paymentId) {
     throw new Error('Instant online checkout is currently disabled by the property owner.');
   }
 
-  const resident = await Resident.findById(payment.residentId).lean();
+  const resident = await Resident.findOne({ _id: payment.residentId, organizationId: tenant.organizationId }).lean();
   if (!resident) {
-    throw new Error('Associated resident profile not found.');
+    throw new Error('Associated resident profile not found in this organization.');
   }
 
   const orderInfo = await PaymentService.createOrder(org, payment, outstanding, resident);

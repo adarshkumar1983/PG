@@ -16,6 +16,8 @@ const userSchema = new mongoose.Schema({
   platformRole: { type: String, enum: ['super_admin', 'user'], default: 'user' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   sessions: { type: [sessionSchema], select: false, default: [] },
+  resetPasswordToken: { type: String, select: false },
+  resetPasswordExpires: { type: Date, select: false },
   lastLoginAt: Date
 }, { timestamps: true });
 
