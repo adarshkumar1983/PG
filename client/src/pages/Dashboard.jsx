@@ -22,6 +22,7 @@ import MessManagementPage from './MessManagementPage.jsx';
 import NotificationCenter from '../components/NotificationCenter.jsx';
 import ResidentPaymentModal from '../components/ResidentPaymentModal.jsx';
 import GlobalSearchModal from '../components/GlobalSearchModal.jsx';
+import Logo from '../components/Logo.jsx';
 import { fetchWithCache, invalidateCache } from '../utils/apiClient.js';
 import { CardSkeleton, TableSkeleton } from '../components/Skeleton.jsx';
 
@@ -252,9 +253,8 @@ export function Dashboard({ session, onLogout }) {
 
     <div className="app-shell">
       <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
-        <div className="brand">
-          <span className="brand-mark"><Building2 size={20} /></span>
-          <span>StayZen</span>
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+          <Logo size={32} showTagline={true} />
           <button className="mobile-close" onClick={() => setMenuOpen(false)}><X /></button>
         </div>
 

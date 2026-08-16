@@ -36,14 +36,6 @@ export function Register({ onSwitchView }) {
       return;
     }
 
-    if (mobile) {
-      const cleanMobile = mobile.replace(/\D/g, '');
-      if (cleanMobile.length !== 10) {
-        setError('Mobile number must be a valid 10-digit number.');
-        return;
-      }
-    }
-
     if (!termsAccepted) {
       setError('Please agree to the Terms of Service and Privacy Policy.');
       return;
@@ -100,7 +92,7 @@ export function Register({ onSwitchView }) {
           </span>
           <h1>Start your journey<br />with StayZen today.</h1>
           <p>Join hundreds of modern PG owners scaling their rental operations seamlessly.</p>
-          
+
           <div className="auth-proof">
             <motion.div
               className="proof-card"
@@ -141,7 +133,7 @@ export function Register({ onSwitchView }) {
 
       <section className="auth-form-wrap">
         <ThemeToggle style={{ position: 'absolute', top: '24px', right: '24px' }} />
-        
+
         <motion.div
           className="auth-card"
           initial={{ scale: 0.96, opacity: 0, y: 15 }}
@@ -243,14 +235,11 @@ export function Register({ onSwitchView }) {
                   <input
                     id="reg-mobile"
                     type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]{10}"
-                    maxLength={10}
                     value={mobile}
-                    onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onChange={e => setMobile(e.target.value)}
                     onFocus={() => setFocusedField('mobile')}
                     onBlur={() => setFocusedField(null)}
-                    placeholder="e.g. 9876543210"
+                    placeholder="+91 98765 43210"
                     autoComplete="tel"
                   />
                 </motion.div>

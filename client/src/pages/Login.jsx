@@ -66,7 +66,7 @@ export function Login({ onLogin, onSwitchView, onSwitchForgotPassword }) {
           </span>
           <h1>Run every property<br />from one calm place.</h1>
           <p>Residents, rooms, rent, expenses and staff access—organized for growing PG businesses.</p>
-          
+
           <div className="auth-proof">
             <motion.div
               className="proof-card"
@@ -107,7 +107,7 @@ export function Login({ onLogin, onSwitchView, onSwitchForgotPassword }) {
 
       <section className="auth-form-wrap">
         <ThemeToggle style={{ position: 'absolute', top: '24px', right: '24px' }} />
-        
+
         <motion.div
           className="auth-card"
           initial={{ scale: 0.96, opacity: 0, y: 15 }}
