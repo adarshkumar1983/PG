@@ -116,7 +116,7 @@ export default class CashfreeProvider {
       ];
     }
 
-    const response = await nativeFetch(`${this.getBaseUrl()}/orders`, {
+    let response = await nativeFetch(`${this.getBaseUrl()}/orders`, {
       method: 'POST',
       headers: {
         'x-client-id': this.getAppId(),
@@ -127,7 +127,25 @@ export default class CashfreeProvider {
       body: JSON.stringify(payload)
     });
 
-    const result = await response.json();
+    let result = await response.json();
+
+    // If Easy Split is not activated on this Cashfree account yet, fallback gracefully to direct collection
+    if (!response.ok && payload.order_splits && /easy split|split/i.test(result.message || '')) {
+      console.warn(`[CashfreeProvider] Easy Split not enabled on Cashfree account. Falling back to direct order creation without splits.`);
+      delete payload.order_splits;
+      response = await nativeFetch(`${this.getBaseUrl()}/orders`, {
+        method: 'POST',
+        headers: {
+          'x-client-id': this.getAppId(),
+          'x-client-secret': this.getSecretKey(),
+          'x-api-version': this.getApiVersion(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      result = await response.json();
+    }
+
     if (!response.ok) {
       throw new Error(result.message || 'Failed to create Cashfree order');
     }
